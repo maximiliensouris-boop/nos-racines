@@ -106,7 +106,9 @@
     .person-card.search-muted { opacity: .28; }
     .person-card.search-match { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(216, 167, 99, .24); }
     .card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
-    .card-avatar { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; background: var(--sage-pale); color: var(--green); font-family: Georgia, serif; font-size: 11px; }
+    .card-avatar { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: var(--sage-pale); color: var(--green); font-family: Georgia, serif; font-size: 13px; }
+    .card-avatar.has-photo { overflow: hidden; padding: 0; }
+    .card-avatar-photo { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
     .card-tag { padding: 4px 6px; border-radius: 5px; background: #f3eee4; color: #92805f; font-size: 8px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
     .card-name { display: block; overflow-wrap: anywhere; font-family: Georgia, serif; font-size: 15px; line-height: 1.25; }
     .card-last-name { color: #69776c; }
@@ -632,8 +634,38 @@
           });
           refs.treeCanvas.appendChild(column);
         });
+        renderTreeAvatars();
         window.requestAnimationFrame(drawConnectors);
         if (searchText) applySearchHighlights();
+      }
+      function renderTreeAvatars() {
+        const cards = Array.from(refs.treeCanvas.querySelectorAll('.person-card')).map(function (card) {
+          return { card: card, avatar: card.querySelector('.card-avatar'), personId: card.dataset.personId };
+        });
+        if (!cards.length) return;
+        allAttachments().then(function (records) {
+          const firstPhotoByPerson = new Map();
+          records.sort(function (a, b) { return String(a.createdAt || '').localeCompare(String(b.createdAt || '')); }).forEach(function (record) {
+            if (record.type && record.type.startsWith('image/') && !firstPhotoByPerson.has(record.personId)) firstPhotoByPerson.set(record.personId, record);
+          });
+          cards.forEach(function (entry) {
+            const record = firstPhotoByPerson.get(entry.personId);
+            if (!record || !entry.card.isConnected || !entry.avatar) return;
+            const url = URL.createObjectURL(record.blob);
+            activeAttachmentUrls.push(url);
+            entry.avatar.classList.add('has-photo');
+            entry.avatar.replaceChildren();
+            const photo = document.createElement('img');
+            photo.className = 'card-avatar-photo'; photo.src = url; photo.alt = ''; photo.setAttribute('aria-hidden', 'true');
+            photo.addEventListener('error', function () {
+              URL.revokeObjectURL(url);
+              const urlIndex = activeAttachmentUrls.indexOf(url);
+              if (urlIndex !== -1) activeAttachmentUrls.splice(urlIndex, 1);
+              if (entry.avatar.isConnected) { entry.avatar.classList.remove('has-photo'); entry.avatar.textContent = initials(byId(entry.personId) || {}); }
+            }, { once: true });
+            entry.avatar.appendChild(photo);
+          });
+        }).catch(function () { /* L’arbre reste lisible avec les initiales si les pièces jointes sont indisponibles. */ });
       }
       function drawConnectors() {
         const svg = refs.treeCanvas.querySelector('.connector-layer');
