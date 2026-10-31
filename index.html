@@ -97,6 +97,13 @@
     .person-list-name { display: block; overflow: hidden; max-width: 190px; color: #354239; font-size: 12px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
     .person-list-years { display: block; margin-top: 3px; color: #93988e; font-size: 10px; }
     .side-empty { padding: 12px 4px; color: #93988e; font-size: 12px; line-height: 1.5; }
+    .dataset-summary { margin: -2px 0 4px; color: #879084; font-size: 10px; line-height: 1.45; }
+    .dataset-download { display: inline-block; margin: 0 0 8px; color: var(--green); font-size: 10px; text-decoration: none; }
+    .dataset-download:hover { text-decoration: underline; }
+    .genealogy-details { margin: 0 0 12px; color: #69746a; font-size: 10px; }
+    .genealogy-details summary { cursor: pointer; font-weight: 700; }
+    .genealogy-details ul { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 17px; line-height: 1.45; }
+    .genealogy-details li { overflow-wrap: anywhere; }
     .selected-card { margin-top: auto; padding-top: 18px; }
     .selected-person { padding: 15px 13px; border-radius: 9px; background: #f7f7f1; }
     .selected-person-head { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
@@ -266,7 +273,7 @@
       <aside class="sidebar">
         <div>
           <p class="side-label">Mon arbre</p>
-          <input class="family-name" id="familyName" aria-label="Nom de l’arbre" value="Ma famille" maxlength="48">
+          <input class="family-name" id="familyName" aria-label="Nom de l’arbre" value="Nos Racines" maxlength="48">
         </div>
         <div class="side-divider"></div>
         <div aria-label="Résumé de l’arbre">
@@ -279,17 +286,19 @@
           <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.5" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.2 4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
           <input class="search-input" id="searchInput" type="search" placeholder="Rechercher un nom…" aria-label="Rechercher une personne">
         </label>
+        <p class="dataset-summary" id="datasetSummary">Chargement du fichier généalogique…</p>
+        <a class="dataset-download" href="genealogie-complete.ged" download>Télécharger le fichier généalogique complet (.ged)</a>
         <div class="person-list" id="personList"></div>
         <div class="selected-card" id="selectedCard"></div>
         <div class="sidebar-foot">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s7-3.5 7-9V5l-7-2-7 2v7c0 5.5 7 9 7 9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span>Enregistré automatiquement sur cet appareil.</span>
+          <span>La base complète est publique ; vos modifications restent sur cet appareil.</span>
         </div>
       </aside>
 
       <section class="tree-panel" aria-label="Visualisation de l’arbre">
         <div class="panel-toolbar">
-          <div class="panel-heading"><h2 id="treeTitle">Ma famille</h2><p>Choisissez une carte pour consulter ou modifier une personne.</p></div>
+          <div class="panel-heading"><h2 id="treeTitle">Nos Racines</h2><p>Recherchez un nom ; l’arbre montre trois générations autour de la personne choisie.</p></div>
           <div class="panel-tools">
             <button class="button button-quiet" id="importBtn" type="button" title="Importer un fichier JSON">Importer</button>
             <button class="button button-quiet" id="exportBtn" type="button" title="Exporter votre arbre au format JSON">Exporter</button>
@@ -478,39 +487,252 @@
           refs.pendingFiles.appendChild(row);
         });
       }
-      function save() {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify({ familyName: refs.familyName.value.trim() || 'Ma famille', people: people, selectedId: selectedId }));
-        } catch (error) {
-          showToast('Enregistrement indisponible dans ce navigateur. Pensez à exporter votre arbre.');
-        }
+      const EVENT_LABELS = {
+        BIRT:'Naissance', DEAT:'Décès', BAPM:'Baptême', CHR:'Baptême', BURI:'Inhumation', CREM:'Crémation',
+        RESI:'Résidence', OCCU:'Profession', EDUC:'Études', GRAD:'Diplôme', RETI:'Retraite', CENS:'Recensement',
+        EMIG:'Émigration', IMMI:'Immigration', NATU:'Naturalisation', TITL:'Titre', RELI:'Religion',
+        MARR:'Mariage', DIV:'Divorce', MARB:'Publication de bans', ENGA:'Fiançailles', ANUL:'Annulation',
+        EVEN:'Événement', ADOP:'Adoption', CONF:'Confirmation', ORDN:'Ordination', PROB:'Homologation de testament',
+        WILL:'Testament', CHRA:'Baptême', SLGC:'Scellement familial'
+      };
+      const EVENT_TAGS = new Set(Object.keys(EVENT_LABELS));
+      const EDITABLE_FIELDS = ['firstName','lastName','birth','death','birthPlace','place','note'];
+      let people = [];
+      let selectedId = null;
+      let toastTimer = null;
+      let searchText = '';
+      let attachmentDbPromise = null;
+      let activeAttachmentUrls = [];
+      let peopleById = new Map();
+      let childrenById = new Map();
+      let sortedPeople = [];
+      let basePeople = [];
+      let baseById = new Map();
+      let datasetStats = { people: 0, families: 0 };
+      let datasetLoaded = false;
+      let canSave = true;
+      const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+      const MAX_LIST_RESULTS = 100;
+      const MAX_TREE_GENERATIONS = 3;
+      const MAX_CARDS_PER_GENERATION = 48;
+
+      function eventLabel(tag) { return EVENT_LABELS[tag] || String(tag || '').replace(/_/g, ' ').toLocaleLowerCase('fr'); }
+      function fullName(person) { return [person.firstName, person.lastName].filter(Boolean).join(' '); }
+      function initials(person) {
+        const first = (person.firstName || '').trim().charAt(0);
+        const last = (person.lastName || '').trim().charAt(0);
+        return (first + last).toUpperCase() || '?';
       }
-      function load() {
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (!raw) return;
-          const data = JSON.parse(raw);
-          if (data && Array.isArray(data.people)) {
-            people = data.people.filter(isValidPerson).map(normalizePerson);
-            refs.familyName.value = typeof data.familyName === 'string' ? data.familyName : 'Ma famille';
-            selectedId = people.some(function (person) { return person.id === data.selectedId; }) ? data.selectedId : (people[0] && people[0].id) || null;
-          }
-        } catch (error) {
-          people = [];
-          selectedId = null;
-        }
+      function years(person) {
+        const born = person.birth ? String(person.birth).trim() : '';
+        const died = person.death ? String(person.death).trim() : '';
+        return born && died ? born + ' — ' + died : born ? 'Né(e) en ' + born : died ? 'Décédé(e) en ' + died : 'Dates inconnues';
       }
-      function isValidPerson(person) {
-        return person && typeof person === 'object' && typeof person.id === 'string' && typeof person.firstName === 'string';
+      function byId(id) { return peopleById.get(id); }
+      function normalizeEvent(item) {
+        if (!item || typeof item !== 'object') return null;
+        const tag = String(item.tag || '');
+        return { tag: tag, label: String(item.label || eventLabel(tag)), value: String(item.value || ''), date: String(item.date || ''), place: String(item.place || ''), note: String(item.note || ''), details: Array.isArray(item.details) ? item.details.map(String) : [] };
       }
       function normalizePerson(person) {
         return {
           id: person.id,
-          firstName: escapeName(person.firstName), lastName: escapeName(person.lastName),
+          firstName: String(person.firstName || '').trim(), lastName: String(person.lastName || '').trim(),
           birth: String(person.birth || ''), death: String(person.death || ''), birthPlace: String(person.birthPlace || ''), place: String(person.place || ''),
-          note: String(person.note || ''), parentIds: Array.isArray(person.parentIds) ? person.parentIds.filter(function (id) { return typeof id === 'string' && id !== person.id; }) : []
+          note: String(person.note || ''), sex: String(person.sex || ''),
+          parentIds: Array.isArray(person.parentIds) ? person.parentIds.filter(function (id) { return typeof id === 'string' && id !== person.id; }) : [],
+          spouseIds: Array.isArray(person.spouseIds) ? person.spouseIds.filter(function (id) { return typeof id === 'string' && id !== person.id; }) : [],
+          facts: Array.isArray(person.facts) ? person.facts.map(normalizeEvent).filter(Boolean) : [],
+          events: Array.isArray(person.events) ? person.events.map(normalizeEvent).filter(Boolean) : [],
+          unions: Array.isArray(person.unions) ? person.unions.map(function (union) {
+            if (!union || typeof union !== 'object') return null;
+            return { familyId: String(union.familyId || ''), spouseIds: Array.isArray(union.spouseIds) ? union.spouseIds.filter(function (id) { return typeof id === 'string'; }) : [], events: Array.isArray(union.events) ? union.events.map(normalizeEvent).filter(Boolean) : [], notes: Array.isArray(union.notes) ? union.notes.map(String) : [], sourceRefs: Array.isArray(union.sourceRefs) ? union.sourceRefs.map(String) : [] };
+          }).filter(Boolean) : [],
+          sourceRefs: Array.isArray(person.sourceRefs) ? person.sourceRefs.map(String) : []
         };
       }
+      function parseGedcom(text) {
+        const records = [];
+        let current = null;
+        String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).forEach(function (line) {
+          const root = line.match(/^0\s+(@[^\s]+@\s+)?([A-Z_]+)(?:\s+(.*))?$/);
+          if (root) {
+            const type = root[2];
+            if (type === 'INDI' || type === 'FAM') {
+              current = { id: String(root[1] || '').trim(), type: type, lines: [] };
+              records.push(current);
+            } else current = null;
+          } else if (current) current.lines.push(line);
+        });
+        function readLine(line) {
+          const m = line.match(/^(\d+)\s+([A-Z_]+)(?:\s+(.*))?$/);
+          return m ? { level: Number(m[1]), tag: m[2], value: m[3] || '' } : null;
+        }
+        function parseEventsAndFacts(lines, includeFamily) {
+          const result = { events: [], facts: [], notes: [], sourceRefs: [], familyRefs: [], spouseRefs: [], children: [], sex: '', firstName: '', lastName: '', parentFamilyIds: [] };
+          let currentEvent = null;
+          let noteIndex = -1;
+          let nameContext = false;
+          lines.forEach(function (line) {
+            const entry = readLine(line);
+            if (!entry) return;
+            const tag = entry.tag, value = entry.value;
+            if (entry.level === 1) {
+              currentEvent = null; noteIndex = -1; nameContext = tag === 'NAME';
+              if (includeFamily) {
+                if (tag === 'HUSB') result.familyRefs.push(value);
+                else if (tag === 'WIFE') result.spouseRefs.push(value);
+                else if (tag === 'CHIL') result.children.push(value);
+                else if (EVENT_TAGS.has(tag)) { currentEvent = { tag: tag, label: eventLabel(tag), value: value, date: '', place: '', note: '', details: [] }; result.events.push(currentEvent); }
+                else if (tag === 'NOTE' && value) { result.notes.push(value); noteIndex = result.notes.length - 1; }
+                else if (tag === 'SOUR' && value) result.sourceRefs.push(value);
+                else if (!['CHAN','RIN','REFN','UID','_UID','SUBM','OBJE','NCHI','NMR'].includes(tag) && value) result.facts.push({ tag: tag, label: eventLabel(tag), value: value, date: '', place: '', note: '', details: [] });
+                return;
+              }
+              if (tag === 'NAME') {
+                const name = value.match(/^(.*?)\s*\/([^/]+)\/(?:\s*(.*))?$/);
+                if (name) { result.firstName = name[1].trim(); result.lastName = [name[2], name[3]].filter(Boolean).join(' ').trim(); }
+                else if (value) result.firstName = value.replace(/\//g, ' ').trim();
+              } else if (tag === 'SEX') result.sex = value;
+              else if (tag === 'FAMC') result.parentFamilyIds.push(value);
+              else if (tag === 'FAMS') result.familyRefs.push(value);
+              else if (tag === 'NOTE' && value) { result.notes.push(value); noteIndex = result.notes.length - 1; }
+              else if (tag === 'SOUR' && value) result.sourceRefs.push(value);
+              else if (EVENT_TAGS.has(tag)) { currentEvent = { tag: tag, label: eventLabel(tag), value: value, date: '', place: '', note: '', details: [] }; result.events.push(currentEvent); }
+              else if (!['CHAN','RIN','REFN','UID','_UID','SUBM','OBJE','ASSO','RESN','NCHI','NMR','AFN','RFN'].includes(tag) && value) result.facts.push({ tag: tag, label: eventLabel(tag), value: value, date: '', place: '', note: '', details: [] });
+              return;
+            }
+            if (nameContext && entry.level === 2 && tag === 'GIVN') result.firstName = value;
+            else if (nameContext && entry.level === 2 && tag === 'SURN') result.lastName = value;
+            else if (tag === 'SOUR' && value) result.sourceRefs.push(value);
+            else if (currentEvent) {
+              if (tag === 'DATE') currentEvent.date = value;
+              else if (tag === 'PLAC') currentEvent.place = value;
+              else if (tag === 'NOTE') currentEvent.note = value;
+              else if ((tag === 'CONT' || tag === 'CONC') && currentEvent.note) currentEvent.note += (tag === 'CONT' ? '\n' : '') + value;
+              else if (tag !== 'CONT' && tag !== 'CONC') currentEvent.details.push(tag + (value ? ': ' + value : ''));
+              else if (tag === 'CONT' || tag === 'CONC') currentEvent.value += (tag === 'CONT' ? '\n' : '') + value;
+            } else if (noteIndex >= 0 && (tag === 'CONT' || tag === 'CONC')) {
+              result.notes[noteIndex] += (tag === 'CONT' ? '\n' : '') + value;
+            }
+          });
+          return result;
+        }
+        const peopleRecords = records.filter(function (record) { return record.type === 'INDI'; });
+        const families = records.filter(function (record) { return record.type === 'FAM'; }).map(function (record) {
+          const parsed = parseEventsAndFacts(record.lines, true);
+          return { id: record.id, husbandId: parsed.familyRefs[0] || '', wifeId: parsed.spouseRefs[0] || '', childIds: parsed.children, events: parsed.events, notes: parsed.notes, sourceRefs: parsed.sourceRefs };
+        });
+        const people = peopleRecords.map(function (record) {
+          const parsed = parseEventsAndFacts(record.lines, false);
+          const events = parsed.events;
+          const birthEvent = events.find(function (event) { return event.tag === 'BIRT'; }) || events.find(function (event) { return event.tag === 'CHR' || event.tag === 'BAPM'; });
+          const deathEvent = events.find(function (event) { return event.tag === 'DEAT'; });
+          return {
+            id: record.id, firstName: parsed.firstName || 'Prénom inconnu', lastName: parsed.lastName,
+            birth: birthEvent ? birthEvent.date : '', death: deathEvent ? deathEvent.date : '',
+            birthPlace: birthEvent ? birthEvent.place : '', place: deathEvent ? deathEvent.place : '',
+            note: parsed.notes.join('\n\n'), sex: parsed.sex, parentIds: [], spouseIds: [],
+            facts: parsed.facts, events: events, unions: [], sourceRefs: parsed.sourceRefs
+          };
+        });
+        const peopleByRecordId = new Map(people.map(function (person) { return [person.id, person]; }));
+        families.forEach(function (family) {
+          const partners = [family.husbandId, family.wifeId].filter(function (id) { return peopleByRecordId.has(id); });
+          family.childIds.forEach(function (childId) {
+            const child = peopleByRecordId.get(childId);
+            if (child) child.parentIds = child.parentIds.concat(partners.filter(function (id) { return id !== childId; }));
+          });
+          partners.forEach(function (partnerId) {
+            const partner = peopleByRecordId.get(partnerId);
+            partner.spouseIds = partner.spouseIds.concat(partners.filter(function (id) { return id !== partnerId; }));
+            partner.unions.push({ familyId: family.id, spouseIds: partners.filter(function (id) { return id !== partnerId; }), events: family.events, notes: family.notes, sourceRefs: family.sourceRefs });
+          });
+        });
+        people.forEach(function (person) {
+          person.parentIds = Array.from(new Set(person.parentIds));
+          person.spouseIds = Array.from(new Set(person.spouseIds));
+        });
+        return { people: people, familyCount: families.length };
+      }
+      function rebuildPeopleIndexes() {
+        peopleById = new Map();
+        childrenById = new Map();
+        people.forEach(function (person) { peopleById.set(person.id, person); });
+        people.forEach(function (person) {
+          (person.parentIds || []).forEach(function (parentId) {
+            if (!childrenById.has(parentId)) childrenById.set(parentId, []);
+            childrenById.get(parentId).push(person);
+          });
+        });
+        sortedPeople = people.slice().sort(function (a, b) { return fullName(a).localeCompare(fullName(b), 'fr'); });
+      }
+      function save() {
+        if (!canSave) return;
+        try {
+          const current = new Map(people.map(function (person) { return [person.id, person]; }));
+          const overrides = [], additions = [], deletedIds = [];
+          people.forEach(function (person) {
+            const base = baseById.get(person.id);
+            if (!base) { additions.push(person); return; }
+            const patch = { id: person.id };
+            let changed = false;
+            EDITABLE_FIELDS.forEach(function (key) { if (String(person[key] || '') !== String(base[key] || '')) { patch[key] = person[key]; changed = true; } });
+            const currentParents = (person.parentIds || []).join('\u001f');
+            const baseParents = (base.parentIds || []).join('\u001f');
+            if (currentParents !== baseParents) { patch.parentIds = person.parentIds.slice(); changed = true; }
+            if (changed) overrides.push(patch);
+          });
+          baseById.forEach(function (person, id) { if (!current.has(id)) deletedIds.push(id); });
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, familyName: refs.familyName.value.trim() || 'Nos Racines', selectedId: selectedId, overrides: overrides, additions: additions, deletedIds: deletedIds }));
+        } catch (error) { showToast('Enregistrement indisponible dans ce navigateur. Pensez à exporter votre arbre.'); }
+      }
+      async function load() {
+        let saved = null;
+        try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) saved = JSON.parse(raw); } catch (error) { saved = null; }
+        try {
+          const response = await fetch(new URL('genealogie-complete.ged', document.baseURI));
+          if (!response.ok) throw new Error('dataset unavailable');
+          const parsed = parseGedcom(await response.text());
+          basePeople = parsed.people.map(normalizePerson);
+          baseById = new Map(basePeople.map(function (person) { return [person.id, person]; }));
+          people = basePeople.map(function (person) { return normalizePerson(person); });
+          datasetStats = { people: people.length, families: parsed.familyCount };
+          datasetLoaded = true;
+        } catch (error) {
+          basePeople = []; baseById = new Map(); datasetLoaded = false;
+          people = [];
+        }
+        if (saved && saved.version === 2 && datasetLoaded) {
+          const deleted = new Set(Array.isArray(saved.deletedIds) ? saved.deletedIds : []);
+          const overrides = new Map((Array.isArray(saved.overrides) ? saved.overrides : []).filter(isValidPersonPatch).map(function (item) { return [item.id, item]; }));
+          people = people.filter(function (person) { return !deleted.has(person.id); }).map(function (person) {
+            const patch = overrides.get(person.id);
+            return patch ? normalizePerson(Object.assign({}, person, patch)) : person;
+          });
+          const loadedIds = new Set(people.map(function (person) { return person.id; }));
+          (Array.isArray(saved.additions) ? saved.additions : []).filter(isValidPerson).forEach(function (person) {
+            if (!loadedIds.has(person.id)) { people.push(normalizePerson(person)); loadedIds.add(person.id); }
+          });
+        } else if (saved && Array.isArray(saved.people)) {
+          const merged = new Map(people.map(function (person) { return [person.id, person]; }));
+          saved.people.filter(isValidPerson).forEach(function (person) { merged.set(person.id, normalizePerson(person)); });
+          people = Array.from(merged.values());
+        } else if (saved && saved.version === 2 && !datasetLoaded) {
+          canSave = false;
+          people = (Array.isArray(saved.additions) ? saved.additions : []).filter(isValidPerson).map(normalizePerson);
+        }
+        refs.familyName.value = saved && typeof saved.familyName === 'string' ? saved.familyName.slice(0, 48) : 'Nos Racines';
+        selectedId = people.some(function (person) { return person.id === (saved && saved.selectedId); }) ? saved.selectedId : (people[0] && people[0].id) || null;
+        rebuildPeopleIndexes();
+        refs.search.placeholder = 'Rechercher parmi ' + people.length.toLocaleString('fr-FR') + ' noms…';
+        const summary = document.getElementById('datasetSummary');
+        if (datasetLoaded) summary.textContent = datasetStats.people.toLocaleString('fr-FR') + ' personnes · ' + datasetStats.families.toLocaleString('fr-FR') + ' familles';
+        else summary.textContent = 'La base complète n’a pas pu être chargée.';
+      }
+      function isValidPersonPatch(item) { return item && typeof item.id === 'string'; }
+      function isValidPerson(person) { return person && typeof person === 'object' && typeof person.id === 'string' && typeof person.firstName === 'string'; }
+
       function showToast(message) {
         refs.toast.textContent = message;
         refs.toast.classList.add('show');
@@ -525,14 +747,20 @@
       }
       function renderList() {
         refs.personList.replaceChildren();
-        const sorted = people.slice().sort(function (a, b) { return fullName(a).localeCompare(fullName(b), 'fr'); });
-        const matches = sorted.filter(function (person) { return fullName(person).toLocaleLowerCase('fr').includes(searchText); });
+        const matches = sortedPeople.filter(function (person) { return fullName(person).toLocaleLowerCase('fr').includes(searchText); });
+        const shown = matches.slice(0, MAX_LIST_RESULTS);
+        const selected = byId(selectedId);
+        if (selected && !searchText && !shown.some(function (person) { return person.id === selected.id; })) shown.push(selected);
+        const summary = document.getElementById('datasetSummary');
+        if (summary && datasetLoaded) {
+          summary.textContent = datasetStats.people.toLocaleString('fr-FR') + ' personnes · ' + datasetStats.families.toLocaleString('fr-FR') + ' familles · ' + matches.length.toLocaleString('fr-FR') + ' résultat' + (matches.length === 1 ? '' : 's') + (matches.length > MAX_LIST_RESULTS ? ' (100 premiers affichés)' : '');
+        }
         if (!matches.length) {
           const empty = document.createElement('div');
           empty.className = 'side-empty'; empty.textContent = people.length ? 'Aucun nom ne correspond à cette recherche.' : 'Les personnes ajoutées apparaîtront ici.';
           refs.personList.appendChild(empty); return;
         }
-        matches.forEach(function (person) {
+        shown.forEach(function (person) {
           const button = document.createElement('button');
           button.type = 'button'; button.className = 'person-list-button' + (person.id === selectedId ? ' active' : '');
           const avatar = document.createElement('span'); avatar.className = 'mini-avatar'; avatar.textContent = initials(person);
@@ -543,6 +771,36 @@
           button.addEventListener('click', function () { selectedId = person.id; render(); });
           refs.personList.appendChild(button);
         });
+      }
+      function renderGenealogyDetails(person, wrapper) {
+        const rows = [];
+        if (person.sex) rows.push('Sexe : ' + (person.sex === 'F' ? 'Femme' : person.sex === 'M' ? 'Homme' : person.sex));
+        (person.facts || []).forEach(function (fact) {
+          const value = [fact.value, fact.date, fact.place, fact.note].filter(Boolean).join(' · ');
+          if (value) rows.push((fact.label || eventLabel(fact.tag)) + ' : ' + value);
+        });
+        (person.events || []).filter(function (event) { return event.tag !== 'BIRT' && event.tag !== 'DEAT'; }).forEach(function (event) {
+          const value = [event.date, event.place, event.value, event.note].concat(event.details || []).filter(Boolean).join(' · ');
+          rows.push((event.label || eventLabel(event.tag)) + (value ? ' : ' + value : ''));
+        });
+        (person.unions || []).forEach(function (union) {
+          const partnerNames = (union.spouseIds || []).map(byId).filter(Boolean).map(fullName);
+          const familyLabel = partnerNames.length ? 'Union avec ' + partnerNames.join(' et ') : 'Union familiale';
+          if (union.events && union.events.length) union.events.forEach(function (event) {
+            const value = [event.date, event.place, event.value, event.note].filter(Boolean).join(' · ');
+            rows.push(familyLabel + ' — ' + (event.label || eventLabel(event.tag)) + (value ? ' : ' + value : ''));
+          });
+          else rows.push(familyLabel);
+          (union.notes || []).forEach(function (note) { if (note) rows.push('Note familiale : ' + note); });
+        });
+        if (person.sourceRefs && person.sourceRefs.length) rows.push(person.sourceRefs.length + ' référence' + (person.sourceRefs.length === 1 ? '' : 's') + ' de source');
+        if (!rows.length) return;
+        const details = document.createElement('details'); details.className = 'genealogy-details';
+        const summary = document.createElement('summary'); summary.textContent = 'Autres informations (' + rows.length + ')';
+        const list = document.createElement('ul');
+        rows.slice(0, 40).forEach(function (row) { const item = document.createElement('li'); item.textContent = row; list.appendChild(item); });
+        if (rows.length > 40) { const item = document.createElement('li'); item.textContent = rows.length - 40 + ' autres informations conservées dans le fichier complet.'; list.appendChild(item); }
+        details.append(summary, list); wrapper.appendChild(details);
       }
       function renderSelected() {
         revokeAttachmentUrls();
@@ -563,6 +821,7 @@
         if (person.birthPlace) { const birthPlace = document.createElement('p'); birthPlace.className = 'selected-place'; birthPlace.textContent = 'Lieu de naissance : ' + person.birthPlace; wrapper.appendChild(birthPlace); }
         if (person.place) { const place = document.createElement('p'); place.className = 'selected-place'; place.textContent = 'Lieu de décès : ' + person.place; wrapper.appendChild(place); }
         if (person.note) { const note = document.createElement('p'); note.className = 'selected-note'; note.textContent = person.note; wrapper.appendChild(note); }
+        renderGenealogyDetails(person, wrapper);
         const attachmentPanel = document.createElement('div'); attachmentPanel.className = 'attachments-panel';
         const attachmentHeading = document.createElement('div'); attachmentHeading.className = 'attachments-heading';
         const attachmentTitle = document.createElement('span'); attachmentTitle.textContent = 'Photos et documents';
@@ -613,13 +872,15 @@
         if (!root) return { levels: new Map(), columns: new Map() };
         const levels = new Map([[root.id, 0]]);
         const queue = [root.id];
-        while (queue.length) {
-          const currentId = queue.shift();
+        let cursor = 0;
+        while (cursor < queue.length) {
+          const currentId = queue[cursor++];
           const currentLevel = levels.get(currentId);
+          if (Math.abs(currentLevel) >= MAX_TREE_GENERATIONS) continue;
           const current = byId(currentId);
           if (!current) continue;
           const parents = (current.parentIds || []).map(byId).filter(Boolean);
-          const children = people.filter(function (person) { return (person.parentIds || []).includes(currentId); });
+          const children = childrenById.get(currentId) || [];
           parents.forEach(function (parent) {
             if (!levels.has(parent.id)) { levels.set(parent.id, currentLevel - 1); queue.push(parent.id); }
           });
@@ -632,7 +893,16 @@
           if (!columns.has(level)) columns.set(level, []);
           const person = byId(id); if (person) columns.get(level).push(person);
         });
-        columns.forEach(function (list) { list.sort(function (a, b) { return (a.birth || '9999').localeCompare(b.birth || '9999') || fullName(a).localeCompare(fullName(b), 'fr'); }); });
+        columns.forEach(function (list, level) {
+          list.sort(function (a, b) { return (a.birth || '9999').localeCompare(b.birth || '9999') || fullName(a).localeCompare(fullName(b), 'fr'); });
+          if (list.length > MAX_CARDS_PER_GENERATION) {
+            const visible = list.slice(0, MAX_CARDS_PER_GENERATION);
+            const root = byId(selectedId);
+            if (level === 0 && root && !visible.some(function (person) { return person.id === root.id; })) visible[visible.length - 1] = root;
+            visible.sort(function (a, b) { return (a.birth || '9999').localeCompare(b.birth || '9999') || fullName(a).localeCompare(fullName(b), 'fr'); });
+            columns.set(level, visible);
+          }
+        });
         return { levels: levels, columns: columns };
       }
       function generationLabel(level) {
@@ -716,11 +986,12 @@
         svg.setAttribute('viewBox', '0 0 ' + refs.treeCanvas.scrollWidth + ' ' + Math.max(refs.treeCanvas.scrollHeight, 1));
         svg.replaceChildren();
         const svgNS = 'http://www.w3.org/2000/svg';
-        people.forEach(function (child) {
-          const childCard = refs.treeCanvas.querySelector('[data-person-id="' + CSS.escape(child.id) + '"]');
-          if (!childCard) return;
+        const visibleCards = new Map(Array.from(refs.treeCanvas.querySelectorAll('.person-card')).map(function (card) { return [card.dataset.personId, card]; }));
+        visibleCards.forEach(function (childCard, childId) {
+          const child = byId(childId);
+          if (!child) return;
           (child.parentIds || []).forEach(function (parentId) {
-            const parentCard = refs.treeCanvas.querySelector('[data-person-id="' + CSS.escape(parentId) + '"]');
+            const parentCard = visibleCards.get(parentId);
             if (!parentCard) return;
             const parentRect = parentCard.getBoundingClientRect();
             const childRect = childCard.getBoundingClientRect();
@@ -745,11 +1016,11 @@
         });
       }
       function render() {
-        refs.treeTitle.textContent = refs.familyName.value.trim() || 'Ma famille';
-        refs.peopleCount.textContent = String(people.length);
+        refs.treeTitle.textContent = refs.familyName.value.trim() || 'Nos Racines';
+        refs.peopleCount.textContent = people.length.toLocaleString('fr-FR');
         const graph = getConnectedLevels();
         refs.generationCount.textContent = String(graph.columns.size);
-        refs.treeFooterCount.textContent = people.length ? people.length + (people.length === 1 ? ' personne dans cet arbre' : ' personnes dans cet arbre') : 'Aucune personne pour le moment';
+        refs.treeFooterCount.textContent = people.length ? people.length.toLocaleString('fr-FR') + ' personnes dans cet arbre · aperçu de trois générations autour du membre choisi' : 'Aucune personne pour le moment';
         renderList(); renderSelected(); renderTree(); save();
       }
       function openAdd(relation) {
@@ -776,7 +1047,10 @@
       function populateSecondParent() {
         refs.secondParent.replaceChildren();
         const blank = document.createElement('option'); blank.value = ''; blank.textContent = 'Aucun autre parent'; refs.secondParent.appendChild(blank);
-        people.filter(function (person) { return person.id !== selectedId; }).forEach(function (person) {
+        const selected = byId(selectedId);
+        const preferred = selected ? (selected.spouseIds || []).map(byId).filter(Boolean) : [];
+        const candidates = preferred.concat(sortedPeople.filter(function (person) { return person.id !== selectedId && !preferred.some(function (item) { return item.id === person.id; }); })).slice(0, 200);
+        candidates.forEach(function (person) {
           const option = document.createElement('option'); option.value = person.id; option.textContent = fullName(person); refs.secondParent.appendChild(option);
         });
       }
@@ -806,13 +1080,13 @@
             if (selected && !selected.parentIds.includes(id)) selected.parentIds.push(id);
           }
         }
-        const person = {
+        const person = Object.assign({}, existing || {}, {
           id: id, firstName: firstName, lastName: refs.lastName.value.trim(), birth: refs.birth.value.trim(),
           death: refs.death.value.trim(), birthPlace: refs.birthPlace.value.trim(), place: refs.place.value.trim(), note: refs.note.value.trim(), parentIds: parentIds
-        };
+        });
         if (existing) people = people.map(function (item) { return item.id === id ? person : item; });
         else people.push(person);
-        selectedId = id; refs.dialog.close(); render();
+        selectedId = id; refs.dialog.close(); rebuildPeopleIndexes(); render();
         if (files.length) {
           try {
             await Promise.all(files.map(function (file) { return saveAttachmentForPerson(id, file); }));
@@ -828,7 +1102,7 @@
         catch (error) { showToast('Impossible de supprimer les pièces jointes de cette personne.'); return; }
         people = people.filter(function (item) { return item.id !== person.id; });
         people.forEach(function (item) { item.parentIds = item.parentIds.filter(function (id) { return id !== person.id; }); });
-        selectedId = people.length ? people[0].id : null; render(); showToast('La personne a été supprimée.');
+        selectedId = people.length ? people[0].id : null; rebuildPeopleIndexes(); render(); showToast('La personne a été supprimée.');
       }
       async function exportTree() {
         if (!people.length) { showToast('Ajoutez une personne avant d’exporter votre arbre.'); return; }
@@ -871,7 +1145,7 @@
               } catch (error) { /* Older tree files can still be imported without attachments. */ }
             }
             people = imported; refs.familyName.value = typeof data.familyName === 'string' ? data.familyName.slice(0, 48) : 'Ma famille';
-            selectedId = people[0] ? people[0].id : null; render();
+            selectedId = people[0] ? people[0].id : null; rebuildPeopleIndexes(); render();
             showToast(Array.isArray(data.attachments) && importedAttachments.length ? 'Votre arbre et ses pièces jointes ont été importés.' : 'Votre arbre a été importé.');
           } catch (error) { showToast('Ce fichier ne contient pas un arbre reconnu.'); }
           refs.importFile.value = '';
@@ -894,7 +1168,7 @@
       refs.search.addEventListener('input', function () {
         searchText = refs.search.value.trim().toLocaleLowerCase('fr'); renderList(); applySearchHighlights();
         if (searchText) {
-          const found = people.find(function (person) { return fullName(person).toLocaleLowerCase('fr').includes(searchText); });
+          const found = sortedPeople.find(function (person) { return fullName(person).toLocaleLowerCase('fr').includes(searchText); });
           if (found) {
             const card = refs.treeCanvas.querySelector('[data-person-id="' + CSS.escape(found.id) + '"]');
             if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
@@ -902,7 +1176,7 @@
         }
       });
       window.addEventListener('resize', function () { window.requestAnimationFrame(drawConnectors); });
-      load(); render();
+      load().then(function () { render(); }).catch(function () { render(); });
     }());
   </script>
 </body>
