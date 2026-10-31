@@ -135,8 +135,21 @@
     .field.full { grid-column: 1 / -1; }
     .field label { color: #69746a; font-size: 11px; font-weight: 670; }
     .field input, .field select, .field textarea { width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: #fffefa; color: var(--ink); font-size: 12px; outline: none; }
+    .field input[type="file"] { min-height: 0; padding: 8px; background: #fbfaf6; }
     .field textarea { min-height: 75px; resize: vertical; }
     .field-hint { color: #969b92; font-size: 10px; line-height: 1.5; }
+    .pending-files { display: grid; gap: 5px; color: #66736a; font-size: 10px; }
+    .attachments-panel { margin: 5px 0 12px; }
+    .attachments-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; color: #778174; font-size: 10px; font-weight: 700; }
+    .attachments-list { display: grid; gap: 6px; max-height: 170px; overflow: auto; }
+    .attachment-item { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 6px; border: 1px solid #e6e9df; border-radius: 7px; background: #fffefa; }
+    .attachment-open { display: flex; align-items: center; gap: 7px; flex: 1 1 auto; min-width: 0; color: var(--ink); text-decoration: none; }
+    .attachment-open:hover .attachment-name { text-decoration: underline; }
+    .attachment-thumb { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 5px; object-fit: cover; background: var(--sage-pale); }
+    .attachment-file-icon { width: 38px; height: 38px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 5px; background: var(--rose); color: #93694e; font-size: 9px; font-weight: 750; }
+    .attachment-name { overflow: hidden; color: #58665a; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .attachment-remove { flex: 0 0 auto; min-height: 28px; padding: 0 5px; font-size: 9px; }
+    .attachment-empty { color: #969b92; font-size: 10px; }
     .form-error { display: none; margin: 12px 0 0; color: #a34838; font-size: 11px; }
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 19px; }
     .toast { position: fixed; z-index: 20; right: 22px; bottom: 22px; max-width: min(360px, calc(100% - 44px)); padding: 12px 16px; border: 1px solid rgba(255,255,255,.14); border-radius: 9px; background: #2d4738; color: #fff; box-shadow: 0 10px 28px rgba(30, 45, 34, .2); font-size: 12px; opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
@@ -276,6 +289,7 @@
           <div class="field full" id="relationshipField"><label for="relationship">Lien avec la personne sélectionnée</label><select id="relationship" name="relationship"><option value="child">Ajouter comme enfant</option><option value="parent">Ajouter comme parent</option><option value="root">Commencer une nouvelle branche</option></select></div>
           <div class="field full hidden" id="secondParentField"><label for="secondParent">Autre parent (facultatif)</label><select id="secondParent" name="secondParent"></select><span class="field-hint">Choisissez un second parent déjà présent dans l’arbre, si vous le souhaitez.</span></div>
           <div class="field full"><label for="note">Souvenir ou note</label><textarea id="note" name="note" maxlength="500" placeholder="Une anecdote, une passion, une histoire à transmettre…"></textarea></div>
+          <div class="field full"><label for="attachmentFiles">Photos et documents</label><input id="attachmentFiles" name="attachmentFiles" type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" multiple><span class="field-hint">Photos JPG, PNG, WebP ou GIF, et documents PDF (25 Mo maximum par fichier). Conservés dans ce navigateur, sans envoi sur un serveur.</span><div class="pending-files" id="pendingFiles"></div></div>
         </div>
         <p class="form-error" id="formError" role="alert"></p>
         <div class="dialog-actions"><button class="button button-soft" id="cancelDialog" type="button">Annuler</button><button class="button button-primary" type="submit">Enregistrer</button></div>
@@ -297,12 +311,15 @@
         form: $('#personForm'), dialogTitle: $('#dialogTitle'), dialogSubtitle: $('#dialogSubtitle'), personId: $('#personId'),
         firstName: $('#firstName'), lastName: $('#lastName'), birth: $('#birth'), death: $('#death'), birthPlace: $('#birthPlace'), place: $('#place'), note: $('#note'),
         relationship: $('#relationship'), relationshipField: $('#relationshipField'), secondParent: $('#secondParent'), secondParentField: $('#secondParentField'),
-        formError: $('#formError'), importFile: $('#importFile'), toast: $('#toast')
+        formError: $('#formError'), attachmentFiles: $('#attachmentFiles'), pendingFiles: $('#pendingFiles'), importFile: $('#importFile'), toast: $('#toast')
       };
       let people = [];
       let selectedId = null;
       let toastTimer = null;
       let searchText = '';
+      let attachmentDbPromise = null;
+      let activeAttachmentUrls = [];
+      const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
       function escapeName(value) { return String(value || '').trim(); }
       function fullName(person) { return [person.firstName, person.lastName].filter(Boolean).join(' '); }
@@ -317,6 +334,108 @@
         return born && died ? born + ' — ' + died : born ? 'Né(e) en ' + born : died ? 'Décédé(e) en ' + died : 'Dates inconnues';
       }
       function byId(id) { return people.find(function (person) { return person.id === id; }); }
+      function openAttachmentDatabase() {
+        if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB indisponible'));
+        if (!attachmentDbPromise) {
+          attachmentDbPromise = new Promise(function (resolve, reject) {
+            const request = window.indexedDB.open('nos-racines-attachments-v1', 1);
+            request.onupgradeneeded = function () {
+              const database = request.result;
+              if (!database.objectStoreNames.contains('attachments')) database.createObjectStore('attachments', { keyPath: 'id' });
+            };
+            request.onsuccess = function () {
+              const database = request.result;
+              database.onversionchange = function () { database.close(); };
+              resolve(database);
+            };
+            request.onerror = function () { reject(request.error || new Error('Base de pièces jointes inaccessible')); };
+            request.onblocked = function () { reject(new Error('Base de pièces jointes bloquée')); };
+          });
+        }
+        return attachmentDbPromise;
+      }
+      function attachmentStoreOperation(mode, buildRequest) {
+        return openAttachmentDatabase().then(function (database) {
+          return new Promise(function (resolve, reject) {
+            const transaction = database.transaction('attachments', mode);
+            let result;
+            let request;
+            try { request = buildRequest(transaction.objectStore('attachments')); }
+            catch (error) { reject(error); return; }
+            if (request) {
+              request.onsuccess = function () { result = request.result; };
+              request.onerror = function () { reject(request.error || new Error('Échec de la base de pièces jointes')); };
+            }
+            transaction.oncomplete = function () { resolve(result); };
+            transaction.onerror = function () { reject(transaction.error || new Error('Échec de la base de pièces jointes')); };
+            transaction.onabort = function () { reject(transaction.error || new Error('Enregistrement annulé')); };
+          });
+        });
+      }
+      function allAttachments() { return attachmentStoreOperation('readonly', function (store) { return store.getAll(); }); }
+      function attachmentsForPerson(personId) {
+        return allAttachments().then(function (records) {
+          return records.filter(function (record) { return record.personId === personId; }).sort(function (a, b) { return String(a.createdAt || '').localeCompare(String(b.createdAt || '')); });
+        });
+      }
+      function putAttachment(record) { return attachmentStoreOperation('readwrite', function (store) { return store.put(record); }); }
+      function saveAttachmentForPerson(personId, file) {
+        return putAttachment({ id: newAttachmentId(), personId: personId, name: file.name, type: file.type, createdAt: new Date().toISOString(), blob: file });
+      }
+      function removeAttachment(id) { return attachmentStoreOperation('readwrite', function (store) { return store.delete(id); }); }
+      function removeAttachmentsForPerson(personId) {
+        return attachmentsForPerson(personId).then(function (records) {
+          return attachmentStoreOperation('readwrite', function (store) {
+            records.forEach(function (record) { store.delete(record.id); });
+            return null;
+          });
+        });
+      }
+      function replaceAllAttachments(records) {
+        return openAttachmentDatabase().then(function (database) {
+          return new Promise(function (resolve, reject) {
+            const transaction = database.transaction('attachments', 'readwrite');
+            const store = transaction.objectStore('attachments');
+            store.clear();
+            records.forEach(function (record) { store.put(record); });
+            transaction.oncomplete = resolve;
+            transaction.onerror = function () { reject(transaction.error || new Error('Import des pièces jointes impossible')); };
+            transaction.onabort = function () { reject(transaction.error || new Error('Import des pièces jointes annulé')); };
+          });
+        });
+      }
+      function supportedAttachmentType(type) {
+        return ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'].includes(type);
+      }
+      function newAttachmentId() { return 'file-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+      function revokeAttachmentUrls() {
+        activeAttachmentUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+        activeAttachmentUrls = [];
+      }
+      function blobToDataUrl(blob) {
+        return new Promise(function (resolve, reject) {
+          const reader = new FileReader();
+          reader.onload = function () { resolve(String(reader.result || '')); };
+          reader.onerror = function () { reject(reader.error || new Error('Fichier illisible')); };
+          reader.readAsDataURL(blob);
+        });
+      }
+      function dataUrlToBlob(value, fallbackType) {
+        const match = /^data:([^;,]+);base64,([\s\S]+)$/.exec(String(value || ''));
+        if (!match) throw new Error('Format de pièce jointe invalide');
+        const binary = window.atob(match[2]);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        return new Blob([bytes], { type: match[1] || fallbackType || 'application/octet-stream' });
+      }
+      function renderPendingFiles() {
+        refs.pendingFiles.replaceChildren();
+        Array.from(refs.attachmentFiles.files || []).forEach(function (file) {
+          const row = document.createElement('span');
+          row.textContent = file.name + ' · ' + Math.max(1, Math.round(file.size / 1024)) + ' Ko';
+          refs.pendingFiles.appendChild(row);
+        });
+      }
       function save() {
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify({ familyName: refs.familyName.value.trim() || 'Ma famille', people: people, selectedId: selectedId }));
@@ -384,6 +503,7 @@
         });
       }
       function renderSelected() {
+        revokeAttachmentUrls();
         refs.selectedCard.replaceChildren();
         const person = byId(selectedId);
         if (!person) {
@@ -401,6 +521,13 @@
         if (person.birthPlace) { const birthPlace = document.createElement('p'); birthPlace.className = 'selected-place'; birthPlace.textContent = 'Lieu de naissance : ' + person.birthPlace; wrapper.appendChild(birthPlace); }
         if (person.place) { const place = document.createElement('p'); place.className = 'selected-place'; place.textContent = 'Lieu de décès : ' + person.place; wrapper.appendChild(place); }
         if (person.note) { const note = document.createElement('p'); note.className = 'selected-note'; note.textContent = person.note; wrapper.appendChild(note); }
+        const attachmentPanel = document.createElement('div'); attachmentPanel.className = 'attachments-panel';
+        const attachmentHeading = document.createElement('div'); attachmentHeading.className = 'attachments-heading';
+        const attachmentTitle = document.createElement('span'); attachmentTitle.textContent = 'Photos et documents';
+        attachmentHeading.append(attachmentTitle, makeButton('button button-quiet', '＋ Ajouter', function () { openEdit(person); refs.attachmentFiles.focus(); }));
+        const attachmentList = document.createElement('div'); attachmentList.className = 'attachments-list';
+        attachmentPanel.append(attachmentHeading, attachmentList); wrapper.appendChild(attachmentPanel);
+        renderAttachmentList(person.id, attachmentList);
         const actions = document.createElement('div'); actions.className = 'selected-actions';
         actions.append(
           makeButton('button button-quiet', '＋ Parent', function () { openAdd('parent'); }),
@@ -409,6 +536,35 @@
           makeButton('button button-quiet', 'Supprimer', function () { removePerson(person); })
         );
         wrapper.appendChild(actions); refs.selectedCard.appendChild(wrapper);
+      }
+      function renderAttachmentList(personId, container) {
+        attachmentsForPerson(personId).then(function (records) {
+          if (!container.isConnected) return;
+          container.replaceChildren();
+          if (!records.length) {
+            const empty = document.createElement('span'); empty.className = 'attachment-empty'; empty.textContent = 'Aucune pièce jointe.'; container.appendChild(empty); return;
+          }
+          records.forEach(function (record) {
+            const row = document.createElement('div'); row.className = 'attachment-item';
+            const url = URL.createObjectURL(record.blob); activeAttachmentUrls.push(url);
+            const link = document.createElement('a'); link.className = 'attachment-open'; link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.title = record.name;
+            if (record.type && record.type.startsWith('image/')) {
+              const image = document.createElement('img'); image.className = 'attachment-thumb'; image.src = url; image.alt = record.name; link.appendChild(image);
+            } else {
+              const badge = document.createElement('span'); badge.className = 'attachment-file-icon'; badge.textContent = 'PDF'; link.appendChild(badge);
+            }
+            const name = document.createElement('span'); name.className = 'attachment-name'; name.textContent = record.name; link.appendChild(name);
+            const remove = makeButton('button button-quiet attachment-remove', 'Retirer', function () {
+              if (!window.confirm('Retirer « ' + record.name + ' » de cette personne ?')) return;
+              removeAttachment(record.id).then(function () { revokeAttachmentUrls(); renderAttachmentList(personId, container); showToast('La pièce jointe a été retirée.'); }).catch(function () { showToast('Impossible de retirer ce fichier.'); });
+            });
+            row.append(link, remove); container.appendChild(row);
+          });
+        }).catch(function () {
+          if (!container.isConnected) return;
+          container.replaceChildren();
+          const error = document.createElement('span'); error.className = 'attachment-empty'; error.textContent = 'Pièces jointes indisponibles dans ce navigateur.'; container.appendChild(error);
+        });
       }
       function getConnectedLevels() {
         const root = byId(selectedId) || people[0];
@@ -526,6 +682,7 @@
       }
       function openAdd(relation) {
         refs.form.reset(); refs.personId.value = ''; refs.formError.style.display = 'none';
+        renderPendingFiles();
         refs.dialogTitle.textContent = 'Ajouter une personne';
         refs.dialogSubtitle.textContent = 'Chaque détail aide à garder son souvenir vivant.';
         refs.relationshipField.classList.toggle('hidden', !selectedId);
@@ -537,6 +694,7 @@
       }
       function openEdit(person) {
         refs.form.reset(); refs.personId.value = person.id;
+        renderPendingFiles();
         refs.firstName.value = person.firstName; refs.lastName.value = person.lastName || ''; refs.birth.value = person.birth || '';
         refs.death.value = person.death || ''; refs.birthPlace.value = person.birthPlace || ''; refs.place.value = person.place || ''; refs.note.value = person.note || '';
         refs.relationshipField.classList.add('hidden'); refs.secondParentField.classList.add('hidden');
@@ -554,10 +712,15 @@
         const isChild = refs.relationship.value === 'child' && !!selectedId && !refs.personId.value;
         refs.secondParentField.classList.toggle('hidden', !isChild || people.length < 2);
       }
-      function savePerson(event) {
+      async function savePerson(event) {
         event.preventDefault();
         const firstName = refs.firstName.value.trim();
         if (!firstName) { refs.formError.textContent = 'Ajoutez au moins un prénom.'; refs.formError.style.display = 'block'; return; }
+        const files = Array.from(refs.attachmentFiles.files || []);
+        const unsupported = files.find(function (file) { return !supportedAttachmentType(file.type); });
+        if (unsupported) { refs.formError.textContent = 'Choisissez une photo JPG, PNG, WebP ou GIF, ou un document PDF.'; refs.formError.style.display = 'block'; return; }
+        const oversized = files.find(function (file) { return file.size > MAX_ATTACHMENT_SIZE; });
+        if (oversized) { refs.formError.textContent = 'Chaque fichier doit faire 25 Mo maximum : « ' + oversized.name + ' » est trop volumineux.'; refs.formError.style.display = 'block'; return; }
         const id = refs.personId.value || ('person-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
         const existing = byId(id);
         let parentIds = existing ? existing.parentIds.slice() : [];
@@ -577,34 +740,67 @@
         };
         if (existing) people = people.map(function (item) { return item.id === id ? person : item; });
         else people.push(person);
-        selectedId = id; refs.dialog.close(); render(); showToast(existing ? 'Les informations ont été mises à jour.' : 'La personne a été ajoutée à votre arbre.');
+        selectedId = id; refs.dialog.close(); render();
+        if (files.length) {
+          try {
+            await Promise.all(files.map(function (file) { return saveAttachmentForPerson(id, file); }));
+            render(); showToast(files.length === 1 ? 'La personne et sa pièce jointe ont été enregistrées.' : 'La personne et ses pièces jointes ont été enregistrées.');
+          } catch (error) {
+            render(); showToast('La fiche est enregistrée, mais les fichiers n’ont pas pu être conservés dans ce navigateur.');
+          }
+        } else showToast(existing ? 'Les informations ont été mises à jour.' : 'La personne a été ajoutée à votre arbre.');
       }
-      function removePerson(person) {
+      async function removePerson(person) {
         if (!window.confirm('Supprimer ' + fullName(person) + ' de cet arbre ?')) return;
+        try { await removeAttachmentsForPerson(person.id); }
+        catch (error) { showToast('Impossible de supprimer les pièces jointes de cette personne.'); return; }
         people = people.filter(function (item) { return item.id !== person.id; });
         people.forEach(function (item) { item.parentIds = item.parentIds.filter(function (id) { return id !== person.id; }); });
         selectedId = people.length ? people[0].id : null; render(); showToast('La personne a été supprimée.');
       }
-      function exportTree() {
+      async function exportTree() {
         if (!people.length) { showToast('Ajoutez une personne avant d’exporter votre arbre.'); return; }
-        const payload = { app: 'Nos racines', version: 1, familyName: refs.familyName.value.trim() || 'Ma famille', exportedAt: new Date().toISOString(), people: people };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob); const link = document.createElement('a');
-        link.href = url; link.download = 'arbre-genealogique.json'; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-        showToast('Votre arbre a été exporté au format JSON.');
+        try {
+          const personIds = new Set(people.map(function (person) { return person.id; }));
+          const records = (await allAttachments()).filter(function (record) { return personIds.has(record.personId); });
+          const portableAttachments = await Promise.all(records.map(async function (record) {
+            return { id: record.id, personId: record.personId, name: record.name, type: record.type, createdAt: record.createdAt, data: await blobToDataUrl(record.blob) };
+          }));
+          const payload = { app: 'Nos racines', version: 1, familyName: refs.familyName.value.trim() || 'Ma famille', exportedAt: new Date().toISOString(), people: people, attachments: portableAttachments };
+          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob); const link = document.createElement('a');
+          link.href = url; link.download = 'arbre-genealogique.json'; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+          showToast(portableAttachments.length ? 'Votre arbre et ses pièces jointes ont été exportés.' : 'Votre arbre a été exporté au format JSON.');
+        } catch (error) { showToast('Impossible d’exporter les fichiers joints. Ils restent dans ce navigateur.'); }
       }
       function importTree(file) {
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = function () {
+        reader.onload = async function () {
           try {
             const data = JSON.parse(String(reader.result || ''));
             if (!data || !Array.isArray(data.people) || !data.people.every(isValidPerson)) throw new Error('invalid');
             const imported = data.people.map(normalizePerson);
             const ids = new Set(imported.map(function (person) { return person.id; }));
             imported.forEach(function (person) { person.parentIds = person.parentIds.filter(function (id) { return ids.has(id); }); });
+            let importedAttachments = [];
+            if (Array.isArray(data.attachments)) {
+              importedAttachments = data.attachments.map(function (item) {
+                if (!item || typeof item.id !== 'string' || typeof item.personId !== 'string' || !ids.has(item.personId) || typeof item.name !== 'string') throw new Error('invalid attachment');
+                const blob = dataUrlToBlob(item.data, item.type);
+                if (!supportedAttachmentType(blob.type) || blob.size > MAX_ATTACHMENT_SIZE) throw new Error('invalid attachment');
+                return { id: item.id, personId: item.personId, name: item.name, type: blob.type, createdAt: String(item.createdAt || new Date().toISOString()), blob: blob };
+              });
+              await replaceAllAttachments(importedAttachments);
+            } else {
+              try {
+                const existingAttachments = await allAttachments();
+                await replaceAllAttachments(existingAttachments.filter(function (record) { return ids.has(record.personId); }));
+              } catch (error) { /* Older tree files can still be imported without attachments. */ }
+            }
             people = imported; refs.familyName.value = typeof data.familyName === 'string' ? data.familyName.slice(0, 48) : 'Ma famille';
-            selectedId = people[0] ? people[0].id : null; render(); showToast('Votre arbre a été importé.');
+            selectedId = people[0] ? people[0].id : null; render();
+            showToast(Array.isArray(data.attachments) && importedAttachments.length ? 'Votre arbre et ses pièces jointes ont été importés.' : 'Votre arbre a été importé.');
           } catch (error) { showToast('Ce fichier ne contient pas un arbre reconnu.'); }
           refs.importFile.value = '';
         };
@@ -618,6 +814,7 @@
       $('#importBtn').addEventListener('click', function () { refs.importFile.click(); });
       refs.importFile.addEventListener('change', function () { importTree(refs.importFile.files && refs.importFile.files[0]); });
       refs.form.addEventListener('submit', savePerson);
+      refs.attachmentFiles.addEventListener('change', renderPendingFiles);
       $('#closeDialog').addEventListener('click', function () { refs.dialog.close(); });
       $('#cancelDialog').addEventListener('click', function () { refs.dialog.close(); });
       refs.relationship.addEventListener('change', updateRelationshipFields);
