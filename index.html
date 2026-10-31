@@ -272,7 +272,7 @@
           <div class="field"><label for="birth">Naissance</label><input id="birth" name="birth" maxlength="40" placeholder="Année ou date"></div>
           <div class="field"><label for="death">Décès</label><input id="death" name="death" maxlength="40" placeholder="Année ou date, si applicable"></div>
           <div class="field full"><label for="birthPlace">Lieu de naissance</label><input id="birthPlace" name="birthPlace" maxlength="80" placeholder="Ville, région ou pays"></div>
-          <div class="field full"><label for="place">Lieu associé</label><input id="place" name="place" maxlength="80" placeholder="Ville, région ou pays"></div>
+          <div class="field full"><label for="place">Lieu de décès</label><input id="place" name="place" maxlength="80" placeholder="Ville, région ou pays"></div>
           <div class="field full" id="relationshipField"><label for="relationship">Lien avec la personne sélectionnée</label><select id="relationship" name="relationship"><option value="child">Ajouter comme enfant</option><option value="parent">Ajouter comme parent</option><option value="root">Commencer une nouvelle branche</option></select></div>
           <div class="field full hidden" id="secondParentField"><label for="secondParent">Autre parent (facultatif)</label><select id="secondParent" name="secondParent"></select><span class="field-hint">Choisissez un second parent déjà présent dans l’arbre, si vous le souhaitez.</span></div>
           <div class="field full"><label for="note">Souvenir ou note</label><textarea id="note" name="note" maxlength="500" placeholder="Une anecdote, une passion, une histoire à transmettre…"></textarea></div>
@@ -399,7 +399,7 @@
         const date = document.createElement('p'); date.className = 'selected-dates'; date.textContent = years(person);
         copy.append(name, date); head.append(avatar, copy); wrapper.append(head);
         if (person.birthPlace) { const birthPlace = document.createElement('p'); birthPlace.className = 'selected-place'; birthPlace.textContent = 'Lieu de naissance : ' + person.birthPlace; wrapper.appendChild(birthPlace); }
-        if (person.place) { const place = document.createElement('p'); place.className = 'selected-place'; place.textContent = 'Lieu associé : ' + person.place; wrapper.appendChild(place); }
+        if (person.place) { const place = document.createElement('p'); place.className = 'selected-place'; place.textContent = 'Lieu de décès : ' + person.place; wrapper.appendChild(place); }
         if (person.note) { const note = document.createElement('p'); note.className = 'selected-note'; note.textContent = person.note; wrapper.appendChild(note); }
         const actions = document.createElement('div'); actions.className = 'selected-actions';
         actions.append(
