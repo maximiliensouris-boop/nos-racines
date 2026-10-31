@@ -111,6 +111,7 @@
     .card-name { display: block; overflow-wrap: anywhere; font-family: Georgia, serif; font-size: 15px; line-height: 1.25; }
     .card-last-name { color: #69776c; }
     .card-years { display: block; margin-top: 6px; color: #91978d; font-size: 10px; }
+    .card-birth-place { display: block; margin-top: 5px; overflow-wrap: anywhere; color: #7f897d; font-size: 9px; }
     .connector-layer { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
     .connector { fill: none; stroke: #b7c5b3; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
     .empty-state { position: absolute; z-index: 4; inset: 0; display: grid; place-items: center; min-width: 100%; padding: 30px; }
@@ -272,6 +273,7 @@
           <div class="field"><label for="lastName">Nom de famille</label><input id="lastName" name="lastName" autocomplete="family-name" maxlength="64"></div>
           <div class="field"><label for="birth">Naissance</label><input id="birth" name="birth" maxlength="40" placeholder="Année ou date"></div>
           <div class="field"><label for="death">Décès</label><input id="death" name="death" maxlength="40" placeholder="Année ou date, si applicable"></div>
+          <div class="field full"><label for="birthPlace">Lieu de naissance</label><input id="birthPlace" name="birthPlace" maxlength="80" placeholder="Ville, région ou pays"></div>
           <div class="field full"><label for="place">Lieu associé</label><input id="place" name="place" maxlength="80" placeholder="Ville, région ou pays"></div>
           <div class="field full" id="relationshipField"><label for="relationship">Lien avec la personne sélectionnée</label><select id="relationship" name="relationship"><option value="child">Ajouter comme enfant</option><option value="parent">Ajouter comme parent</option><option value="root">Commencer une nouvelle branche</option></select></div>
           <div class="field full hidden" id="secondParentField"><label for="secondParent">Autre parent (facultatif)</label><select id="secondParent" name="secondParent"></select><span class="field-hint">Choisissez un second parent déjà présent dans l’arbre, si vous le souhaitez.</span></div>
@@ -295,7 +297,7 @@
         personList: $('#personList'), selectedCard: $('#selectedCard'), treeCanvas: $('#treeCanvas'), treeViewport: $('#treeViewport'),
         emptyState: $('#emptyState'), treeFooterCount: $('#treeFooterCount'), search: $('#searchInput'), dialog: $('#personDialog'),
         form: $('#personForm'), dialogTitle: $('#dialogTitle'), dialogSubtitle: $('#dialogSubtitle'), personId: $('#personId'),
-        firstName: $('#firstName'), lastName: $('#lastName'), birth: $('#birth'), death: $('#death'), place: $('#place'), note: $('#note'),
+        firstName: $('#firstName'), lastName: $('#lastName'), birth: $('#birth'), death: $('#death'), birthPlace: $('#birthPlace'), place: $('#place'), note: $('#note'),
         relationship: $('#relationship'), relationshipField: $('#relationshipField'), secondParent: $('#secondParent'), secondParentField: $('#secondParentField'),
         formError: $('#formError'), importFile: $('#importFile'), toast: $('#toast')
       };
@@ -346,7 +348,7 @@
         return {
           id: person.id,
           firstName: escapeName(person.firstName), lastName: escapeName(person.lastName),
-          birth: String(person.birth || ''), death: String(person.death || ''), place: String(person.place || ''),
+          birth: String(person.birth || ''), death: String(person.death || ''), birthPlace: String(person.birthPlace || ''), place: String(person.place || ''),
           note: String(person.note || ''), parentIds: Array.isArray(person.parentIds) ? person.parentIds.filter(function (id) { return typeof id === 'string' && id !== person.id; }) : []
         };
       }
@@ -398,7 +400,8 @@
         const name = document.createElement('h3'); name.className = 'selected-name'; name.textContent = fullName(person);
         const date = document.createElement('p'); date.className = 'selected-dates'; date.textContent = years(person);
         copy.append(name, date); head.append(avatar, copy); wrapper.append(head);
-        if (person.place) { const place = document.createElement('p'); place.className = 'selected-place'; place.textContent = '⌖  ' + person.place; wrapper.appendChild(place); }
+        if (person.birthPlace) { const birthPlace = document.createElement('p'); birthPlace.className = 'selected-place'; birthPlace.textContent = 'Lieu de naissance : ' + person.birthPlace; wrapper.appendChild(birthPlace); }
+        if (person.place) { const place = document.createElement('p'); place.className = 'selected-place'; place.textContent = 'Lieu associé : ' + person.place; wrapper.appendChild(place); }
         if (person.note) { const note = document.createElement('p'); note.className = 'selected-note'; note.textContent = person.note; wrapper.appendChild(note); }
         const actions = document.createElement('div'); actions.className = 'selected-actions';
         actions.append(
@@ -469,6 +472,7 @@
             const last = document.createElement('span'); last.className = 'card-name card-last-name'; last.textContent = person.lastName || 'Nom à compléter';
             const date = document.createElement('span'); date.className = 'card-years'; date.textContent = years(person);
             card.append(top, first, last, date);
+            if (person.birthPlace) { const birthPlace = document.createElement('span'); birthPlace.className = 'card-birth-place'; birthPlace.textContent = 'Naissance · ' + person.birthPlace; card.appendChild(birthPlace); }
             card.addEventListener('click', function () { selectedId = person.id; render(); });
             column.appendChild(card);
           });
@@ -536,7 +540,7 @@
       function openEdit(person) {
         refs.form.reset(); refs.personId.value = person.id;
         refs.firstName.value = person.firstName; refs.lastName.value = person.lastName || ''; refs.birth.value = person.birth || '';
-        refs.death.value = person.death || ''; refs.place.value = person.place || ''; refs.note.value = person.note || '';
+        refs.death.value = person.death || ''; refs.birthPlace.value = person.birthPlace || ''; refs.place.value = person.place || ''; refs.note.value = person.note || '';
         refs.relationshipField.classList.add('hidden'); refs.secondParentField.classList.add('hidden');
         refs.dialogTitle.textContent = 'Modifier cette personne'; refs.dialogSubtitle.textContent = 'Les changements sont enregistrés automatiquement.';
         refs.formError.style.display = 'none'; refs.dialog.showModal(); refs.firstName.focus();
@@ -571,7 +575,7 @@
         }
         const person = {
           id: id, firstName: firstName, lastName: refs.lastName.value.trim(), birth: refs.birth.value.trim(),
-          death: refs.death.value.trim(), place: refs.place.value.trim(), note: refs.note.value.trim(), parentIds: parentIds
+          death: refs.death.value.trim(), birthPlace: refs.birthPlace.value.trim(), place: refs.place.value.trim(), note: refs.note.value.trim(), parentIds: parentIds
         };
         if (existing) people = people.map(function (item) { return item.id === id ? person : item; });
         else people.push(person);
@@ -585,12 +589,12 @@
       }
       function loadExample() {
         people = [
-          { id: 'demo-emile', firstName: 'Émile', lastName: 'Laurent', birth: '1932', death: '2005', place: 'Lyon', note: 'Aimait les longues promenades au bord du Rhône.', parentIds: [] },
-          { id: 'demo-jeanne', firstName: 'Jeanne', lastName: 'Morel', birth: '1935', death: '2018', place: 'Lyon', note: 'Gardait toujours une place de plus à table.', parentIds: [] },
-          { id: 'demo-andre', firstName: 'André', lastName: 'Laurent', birth: '1958', place: 'Lyon', note: 'Transmet les histoires de ses parents.', parentIds: ['demo-emile', 'demo-jeanne'] },
-          { id: 'demo-colette', firstName: 'Colette', lastName: 'Martin', birth: '1960', place: 'Dijon', note: '', parentIds: [] },
-          { id: 'demo-sophie', firstName: 'Sophie', lastName: 'Laurent', birth: '1985', place: 'Paris', note: 'Cette famille est un exemple fictif, à remplacer par vos proches.', parentIds: ['demo-andre', 'demo-colette'] },
-          { id: 'demo-thomas', firstName: 'Thomas', lastName: 'Laurent', birth: '1988', place: 'Paris', note: '', parentIds: ['demo-andre', 'demo-colette'] }
+          { id: 'demo-emile', firstName: 'Émile', lastName: 'Laurent', birth: '1932', death: '2005', birthPlace: 'Lyon', place: 'Lyon', note: 'Aimait les longues promenades au bord du Rhône.', parentIds: [] },
+          { id: 'demo-jeanne', firstName: 'Jeanne', lastName: 'Morel', birth: '1935', death: '2018', birthPlace: 'Lyon', place: 'Lyon', note: 'Gardait toujours une place de plus à table.', parentIds: [] },
+          { id: 'demo-andre', firstName: 'André', lastName: 'Laurent', birth: '1958', birthPlace: 'Lyon', place: 'Lyon', note: 'Transmet les histoires de ses parents.', parentIds: ['demo-emile', 'demo-jeanne'] },
+          { id: 'demo-colette', firstName: 'Colette', lastName: 'Martin', birth: '1960', birthPlace: 'Dijon', place: 'Dijon', note: '', parentIds: [] },
+          { id: 'demo-sophie', firstName: 'Sophie', lastName: 'Laurent', birth: '1985', birthPlace: 'Paris', place: 'Paris', note: 'Cette famille est un exemple fictif, à remplacer par vos proches.', parentIds: ['demo-andre', 'demo-colette'] },
+          { id: 'demo-thomas', firstName: 'Thomas', lastName: 'Laurent', birth: '1988', birthPlace: 'Paris', place: 'Paris', note: '', parentIds: ['demo-andre', 'demo-colette'] }
         ];
         refs.familyName.value = 'Exemple de famille'; selectedId = 'demo-sophie'; render();
         showToast('Exemple chargé. Vous pouvez le modifier ou le remplacer par votre arbre.');
