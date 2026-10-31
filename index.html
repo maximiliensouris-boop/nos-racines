@@ -215,6 +215,28 @@
       .field.full { grid-column: auto; }
       .dialog-head, .dialog-body { padding-left: 17px; padding-right: 17px; }
     }
+
+    /* Full-width top banner */
+    .topbar {
+      height: auto; min-height: 0; display: flex; flex-direction: column; align-items: stretch;
+      justify-content: flex-start; gap: 0; padding: 0;
+    }
+    .topbar .brand-art { display: block; flex: none; width: 100%; max-width: none; height: auto; overflow: hidden; line-height: 0; }
+    .topbar .brand-art img {
+      display: block; width: 100%; max-width: none; height: min(33.333vw, 400px);
+      object-fit: cover; object-position: center 50%;
+    }
+    .topbar .top-note {
+      display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 34px;
+      margin: 0; padding: 5px clamp(18px, 5vw, 76px); border-top: 1px solid rgba(62, 79, 64, .1);
+      background: rgba(250, 248, 242, .96); color: var(--muted); font-size: 11px;
+    }
+    @media (max-width: 720px) {
+      .topbar { height: auto; min-height: 0; padding: 0; }
+      .topbar .brand-art img { height: auto; object-fit: contain; }
+      .topbar .top-note { min-height: 30px; padding: 4px 18px; font-size: 9px; }
+    }
+
   </style>
 </head>
 <body>
