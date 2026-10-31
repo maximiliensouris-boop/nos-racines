@@ -364,27 +364,6 @@
         relationship: $('#relationship'), relationshipField: $('#relationshipField'), secondParent: $('#secondParent'), secondParentField: $('#secondParentField'),
         formError: $('#formError'), attachmentFiles: $('#attachmentFiles'), pendingFiles: $('#pendingFiles'), importFile: $('#importFile'), toast: $('#toast')
       };
-      let people = [];
-      let selectedId = null;
-      let toastTimer = null;
-      let searchText = '';
-      let attachmentDbPromise = null;
-      let activeAttachmentUrls = [];
-      const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
-
-      function escapeName(value) { return String(value || '').trim(); }
-      function fullName(person) { return [person.firstName, person.lastName].filter(Boolean).join(' '); }
-      function initials(person) {
-        const first = (person.firstName || '').trim().charAt(0);
-        const last = (person.lastName || '').trim().charAt(0);
-        return (first + last).toUpperCase() || '?';
-      }
-      function years(person) {
-        const born = person.birth ? String(person.birth).trim() : '';
-        const died = person.death ? String(person.death).trim() : '';
-        return born && died ? born + ' — ' + died : born ? 'Né(e) en ' + born : died ? 'Décédé(e) en ' + died : 'Dates inconnues';
-      }
-      function byId(id) { return people.find(function (person) { return person.id === id; }); }
       function openAttachmentDatabase() {
         if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB indisponible'));
         if (!attachmentDbPromise) {
