@@ -251,7 +251,7 @@
     <a class="brand brand-art" href="#top" aria-label="Nos racines, accueil">
       <img src="nos-racines-banniere.png" alt="Nos racines — arbre généalogique et livre ancien">
     </a>
-    <div class="top-note"><span class="privacy-dot"></span><span>Vos souvenirs restent dans ce navigateur</span></div>
+    <div class="top-note"><span class="privacy-dot"></span><span>La généalogie complète est partagée en ligne</span></div>
   </header>
 
   <main class="page" id="top">
@@ -701,7 +701,9 @@
           canSave = false;
           people = (Array.isArray(saved.additions) ? saved.additions : []).filter(isValidPerson).map(normalizePerson);
         }
-        refs.familyName.value = saved && typeof saved.familyName === 'string' ? saved.familyName.slice(0, 48) : 'Nos Racines';
+        const savedName = saved && typeof saved.familyName === 'string' ? saved.familyName.slice(0, 48) : '';
+        const savedPeopleCount = saved && Array.isArray(saved.people) ? saved.people.length : saved && Array.isArray(saved.additions) ? saved.additions.length : 0;
+        refs.familyName.value = !savedName || (savedName === 'Ma famille' && savedPeopleCount === 0) ? 'Nos Racines' : savedName;
         selectedId = people.some(function (person) { return person.id === (saved && saved.selectedId); }) ? saved.selectedId : (people[0] && people[0].id) || null;
         rebuildPeopleIndexes();
         refs.search.placeholder = 'Rechercher parmi ' + people.length.toLocaleString('fr-FR') + ' noms…';
