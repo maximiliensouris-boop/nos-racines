@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f2e9">
+  <meta name="description" content="Un espace simple et chaleureux pour construire et partager votre arbre généalogique.">
+  <title>Nos racines — Arbre généalogique</title>
+  <style>
+    :root {
+      --paper: #f6f2e9;
+      --paper-deep: #eee7da;
+      --white: #fffefa;
+      --ink: #25342c;
+      --muted: #788078;
+      --green: #365b47;
+      --green-dark: #294736;
+      --sage: #dce7da;
+      --sage-pale: #eef3eb;
+      --gold: #d8a763;
+      --line: #dedfd5;
+      --rose: #f2e4dc;
+      --shadow: 0 16px 45px rgba(46, 58, 46, .08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; background: var(--paper); }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .topbar {
+      height: 74px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(18px, 5vw, 76px); border-bottom: 1px solid rgba(62, 79, 64, .1);
+      background: rgba(250, 248, 242, .82); backdrop-filter: blur(12px);
+    }
+    .brand { display: flex; align-items: center; gap: 11px; color: var(--ink); text-decoration: none; }
+    .brand-mark { width: 37px; height: 37px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: #fffefa; }
+    .brand-mark svg { width: 22px; height: 22px; }
+    .brand-name { font-family: Georgia, "Times New Roman", serif; font-size: 21px; letter-spacing: -.5px; }
+    .top-note { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    .privacy-dot { width: 7px; height: 7px; border-radius: 50%; background: #6a9874; }
+    .page { width: min(1420px, calc(100% - 48px)); margin: 0 auto; padding: 44px 0 64px; }
+    .intro { display: flex; align-items: end; justify-content: space-between; gap: 32px; margin-bottom: 29px; }
+    .eyebrow { margin: 0 0 12px; color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(34px, 4.3vw, 57px); font-weight: 400; letter-spacing: -1.8px; line-height: 1.05; }
+    .intro-copy { max-width: 550px; margin: 13px 0 0; color: #727a70; font-size: 15px; line-height: 1.7; }
+    .intro-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-bottom: 4px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 0 16px; border: 1px solid transparent; border-radius: 8px; font-size: 13px; font-weight: 680; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
+    .button:hover { transform: translateY(-1px); }
+    .button-primary { background: var(--green); color: white; box-shadow: 0 5px 13px rgba(53, 91, 70, .14); }
+    .button-primary:hover { background: var(--green-dark); }
+    .button-soft { background: var(--white); color: var(--ink); border-color: var(--line); }
+    .button-soft:hover { border-color: #aab8a8; background: #fff; }
+    .button-quiet { min-height: 36px; padding: 0 10px; background: transparent; border-color: transparent; color: var(--muted); font-size: 12px; }
+    .button-quiet:hover { background: var(--sage-pale); color: var(--green-dark); }
+    .button svg { width: 16px; height: 16px; }
+    .workspace { display: grid; grid-template-columns: 286px minmax(0, 1fr); gap: 17px; align-items: stretch; min-height: 605px; }
+    .sidebar, .tree-panel { border: 1px solid rgba(70, 83, 66, .11); border-radius: 14px; background: var(--white); box-shadow: var(--shadow); }
+    .sidebar { display: flex; flex-direction: column; padding: 22px 18px 18px; }
+    .side-label { margin: 0 0 13px; color: #879084; font-size: 10px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
+    .family-name { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 7px; background: #fffefa; color: var(--ink); font-size: 14px; font-weight: 650; outline: none; }
+    .family-name:focus, .search-input:focus, .field input:focus, .field select:focus, .field textarea:focus { border-color: #809b82; box-shadow: 0 0 0 3px rgba(89, 126, 94, .1); }
+    .side-divider { height: 1px; margin: 21px 0; background: #edf0e9; }
+    .stat-row { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 0; color: #81887e; font-size: 12px; }
+    .stat-row strong { color: var(--ink); font-size: 14px; font-weight: 680; }
+    .side-section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .side-section-title .side-label { margin: 0; }
+    .search-wrap { position: relative; margin-bottom: 12px; }
+    .search-icon { position: absolute; top: 11px; left: 11px; width: 15px; height: 15px; color: #879084; pointer-events: none; }
+    .search-input { width: 100%; height: 38px; padding: 0 10px 0 34px; border: 1px solid var(--line); border-radius: 7px; background: #fffefa; color: var(--ink); font-size: 12px; outline: none; }
+    .person-list { display: grid; gap: 3px; max-height: 260px; overflow: auto; }
+    .person-list-button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 8px 7px; border: 0; border-radius: 7px; background: transparent; text-align: left; color: var(--ink); }
+    .person-list-button:hover, .person-list-button.active { background: var(--sage-pale); }
+    .mini-avatar { width: 31px; height: 31px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: var(--paper-deep); color: #6f7b6c; font-family: Georgia, serif; font-size: 12px; }
+    .person-list-button.active .mini-avatar { background: var(--green); color: white; }
+    .person-list-name { display: block; overflow: hidden; max-width: 190px; color: #354239; font-size: 12px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+    .person-list-years { display: block; margin-top: 3px; color: #93988e; font-size: 10px; }
+    .side-empty { padding: 12px 4px; color: #93988e; font-size: 12px; line-height: 1.5; }
+    .selected-card { margin-top: auto; padding-top: 18px; }
+    .selected-person { padding: 15px 13px; border-radius: 9px; background: #f7f7f1; }
+    .selected-person-head { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+    .selected-avatar { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; background: var(--sage); color: var(--green); font-family: Georgia, serif; font-size: 16px; }
+    .selected-name { margin: 0; font-family: Georgia, serif; font-size: 17px; font-weight: 400; }
+    .selected-dates { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+    .selected-place { margin: 0 0 11px; color: #747b72; font-size: 11px; }
+    .selected-note { margin: 0 0 12px; color: #666f66; font-size: 11px; line-height: 1.5; white-space: pre-wrap; }
+    .selected-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+    .selected-actions .button { flex: 1 1 auto; }
+    .detail-empty { color: #92988f; font-size: 12px; line-height: 1.6; }
+    .sidebar-foot { display: flex; align-items: center; gap: 8px; margin-top: 16px; color: #92988f; font-size: 10px; line-height: 1.4; }
+    .sidebar-foot svg { width: 15px; height: 15px; flex: 0 0 auto; color: #739278; }
+    .tree-panel { min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+    .panel-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 15px; min-height: 67px; padding: 12px 18px; border-bottom: 1px solid #edf0e9; }
+    .panel-heading h2 { margin: 0; font-family: Georgia, serif; font-size: 18px; font-weight: 400; }
+    .panel-heading p { margin: 4px 0 0; color: #92988f; font-size: 10px; }
+    .panel-tools { display: flex; align-items: center; gap: 5px; }
+    .panel-tools .button { font-size: 11px; }
+    .tree-viewport { position: relative; min-height: 530px; flex: 1; overflow: auto; background-color: #fbfaf6; background-image: radial-gradient(#d9ded3 0.8px, transparent 0.8px); background-size: 18px 18px; }
+    .tree-canvas { position: relative; display: flex; align-items: flex-start; gap: 45px; width: max-content; min-width: 100%; min-height: 530px; padding: 40px 42px 54px; }
+    .generation-column { position: relative; z-index: 1; display: flex; flex: 0 0 205px; flex-direction: column; align-items: center; gap: 17px; }
+    .generation-label { align-self: center; margin-bottom: 2px; padding: 5px 9px; border: 1px solid rgba(71, 92, 70, .1); border-radius: 999px; background: rgba(255, 254, 250, .83); color: #92988f; font-size: 9px; font-weight: 730; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+    .person-card { position: relative; z-index: 2; width: 190px; min-height: 100px; padding: 13px 13px 12px; border: 1px solid #e4e6dc; border-radius: 10px; background: rgba(255, 254, 250, .97); box-shadow: 0 7px 16px rgba(55, 66, 53, .06); text-align: left; color: var(--ink); transition: border .18s ease, transform .18s ease, box-shadow .18s ease, opacity .18s ease; }
+    .person-card:hover { z-index: 3; transform: translateY(-2px); border-color: #a9b9a5; box-shadow: 0 11px 20px rgba(55, 66, 53, .1); }
+    .person-card.selected { border-color: var(--green); box-shadow: 0 0 0 2px rgba(54, 91, 71, .13), 0 8px 18px rgba(55, 66, 53, .09); }
+    .person-card.search-muted { opacity: .28; }
+    .person-card.search-match { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(216, 167, 99, .24); }
+    .card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+    .card-avatar { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; background: var(--sage-pale); color: var(--green); font-family: Georgia, serif; font-size: 11px; }
+    .card-tag { padding: 4px 6px; border-radius: 5px; background: #f3eee4; color: #92805f; font-size: 8px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+    .card-name { display: block; overflow-wrap: anywhere; font-family: Georgia, serif; font-size: 15px; line-height: 1.25; }
+    .card-last-name { color: #69776c; }
+    .card-years { display: block; margin-top: 6px; color: #91978d; font-size: 10px; }
+    .connector-layer { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    .connector { fill: none; stroke: #b7c5b3; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .empty-state { position: absolute; z-index: 4; inset: 0; display: grid; place-items: center; min-width: 100%; padding: 30px; }
+    .empty-card { width: min(430px, 100%); padding: 36px 30px; border: 1px solid rgba(80, 99, 76, .13); border-radius: 15px; background: rgba(255, 254, 250, .96); box-shadow: 0 16px 38px rgba(50, 66, 52, .09); text-align: center; }
+    .empty-illustration { width: 66px; height: 66px; display: grid; place-items: center; margin: 0 auto 20px; border-radius: 50%; background: var(--sage-pale); color: var(--green); }
+    .empty-illustration svg { width: 33px; height: 33px; }
+    .empty-card h3 { margin: 0; font-family: Georgia, serif; font-size: 25px; font-weight: 400; }
+    .empty-card p { margin: 11px 0 22px; color: #7e867c; font-size: 13px; line-height: 1.65; }
+    .empty-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+    .tree-footer { display: flex; justify-content: space-between; gap: 16px; padding: 11px 17px; border-top: 1px solid #edf0e9; color: #969b92; font-size: 10px; }
+    dialog { width: min(520px, calc(100% - 30px)); max-height: min(90vh, 760px); padding: 0; overflow: auto; border: 1px solid rgba(57, 75, 60, .12); border-radius: 14px; background: var(--white); color: var(--ink); box-shadow: 0 24px 80px rgba(32, 45, 33, .23); }
+    dialog::backdrop { background: rgba(33, 43, 35, .44); backdrop-filter: blur(3px); }
+    .dialog-head { display: flex; align-items: start; justify-content: space-between; padding: 22px 23px 16px; border-bottom: 1px solid #edf0e9; }
+    .dialog-head h2 { margin: 0; font-family: Georgia, serif; font-size: 23px; font-weight: 400; }
+    .dialog-head p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .close-dialog { width: 31px; height: 31px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #737d73; font-size: 20px; }
+    .close-dialog:hover { background: var(--sage-pale); }
+    .dialog-body { padding: 19px 23px 22px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+    .field { display: grid; gap: 6px; }
+    .field.full { grid-column: 1 / -1; }
+    .field label { color: #69746a; font-size: 11px; font-weight: 670; }
+    .field input, .field select, .field textarea { width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: #fffefa; color: var(--ink); font-size: 12px; outline: none; }
+    .field textarea { min-height: 75px; resize: vertical; }
+    .field-hint { color: #969b92; font-size: 10px; line-height: 1.5; }
+    .form-error { display: none; margin: 12px 0 0; color: #a34838; font-size: 11px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 19px; }
+    .toast { position: fixed; z-index: 20; right: 22px; bottom: 22px; max-width: min(360px, calc(100% - 44px)); padding: 12px 16px; border: 1px solid rgba(255,255,255,.14); border-radius: 9px; background: #2d4738; color: #fff; box-shadow: 0 10px 28px rgba(30, 45, 34, .2); font-size: 12px; opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .hidden { display: none !important; }
+    @media (max-width: 980px) {
+      .workspace { grid-template-columns: 250px minmax(0, 1fr); }
+      .intro { align-items: start; flex-direction: column; gap: 18px; }
+      .intro-actions { padding: 0; }
+      .panel-toolbar { align-items: flex-start; flex-direction: column; }
+    }
+    @media (max-width: 720px) {
+      .topbar { height: 62px; padding: 0 18px; }
+      .top-note { font-size: 10px; }
+      .page { width: min(100% - 28px, 620px); padding-top: 30px; }
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar { order: 2; }
+      .tree-panel { order: 1; }
+      .tree-viewport, .tree-canvas { min-height: 440px; }
+      .tree-canvas { padding: 30px 25px 40px; gap: 28px; }
+      .panel-toolbar { flex-direction: row; align-items: center; padding: 11px 13px; }
+      .panel-tools { flex-wrap: wrap; justify-content: flex-end; }
+      .panel-tools .button { min-height: 34px; padding: 0 9px; }
+      .panel-heading p { display: none; }
+      .tree-footer { font-size: 9px; }
+      .person-list { max-height: 180px; }
+      .selected-card { margin-top: 8px; }
+    }
+    @media (max-width: 460px) {
+      .brand-name { font-size: 19px; }
+      .top-note span:last-child { max-width: 120px; }
+      h1 { font-size: 37px; }
+      .intro-copy { font-size: 13px; }
+      .intro-actions .button { flex: 1; }
+      .panel-toolbar { align-items: flex-start; flex-direction: column; }
+      .panel-tools { width: 100%; justify-content: flex-start; }
+      .generation-column { flex-basis: 185px; }
+      .person-card { width: 175px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .field.full { grid-column: auto; }
+      .dialog-head, .dialog-body { padding-left: 17px; padding-right: 17px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Nos racines, accueil">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 20V11m0 4c-4.6 0-7.3-2.5-7.3-6.7 4.2 0 7.3 2 7.3 6.7Zm0-3c0-4.4 2.6-7 7.3-7 0 4.4-2.6 7-7.3 7Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.8 20h6.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </span>
+      <span class="brand-name">Nos racines</span>
+    </a>
+    <div class="top-note"><span class="privacy-dot"></span><span>Vos souvenirs restent dans ce navigateur</span></div>
+  </header>
+
+  <main class="page" id="top">
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Histoires de famille</p>
+        <h1 id="page-title">Chaque histoire a<br>ses racines.</h1>
+        <p class="intro-copy">Rassemblez les générations, les dates et les petits souvenirs qui font votre histoire familiale. Commencez avec une personne, puis laissez l’arbre grandir.</p>
+      </div>
+      <div class="intro-actions">
+        <button class="button button-primary" id="addPersonTop" type="button">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          Ajouter une personne
+        </button>
+        <button class="button button-soft" id="showExampleTop" type="button">Découvrir l’exemple</button>
+      </div>
+    </section>
+
+    <section class="workspace" aria-label="Espace de création de l’arbre">
+      <aside class="sidebar">
+        <div>
+          <p class="side-label">Mon arbre</p>
+          <input class="family-name" id="familyName" aria-label="Nom de l’arbre" value="Ma famille" maxlength="48">
+        </div>
+        <div class="side-divider"></div>
+        <div aria-label="Résumé de l’arbre">
+          <div class="stat-row"><span>Personnes</span><strong id="peopleCount">0</strong></div>
+          <div class="stat-row"><span>Générations reliées</span><strong id="generationCount">0</strong></div>
+        </div>
+        <div class="side-divider"></div>
+        <div class="side-section-title"><p class="side-label">Membres de la famille</p></div>
+        <label class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.5" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.2 4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <input class="search-input" id="searchInput" type="search" placeholder="Rechercher un nom…" aria-label="Rechercher une personne">
+        </label>
+        <div class="person-list" id="personList"></div>
+        <div class="selected-card" id="selectedCard"></div>
+        <div class="sidebar-foot">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s7-3.5 7-9V5l-7-2-7 2v7c0 5.5 7 9 7 9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Enregistré automatiquement sur cet appareil.</span>
+        </div>
+      </aside>
+
+      <section class="tree-panel" aria-label="Visualisation de l’arbre">
+        <div class="panel-toolbar">
+          <div class="panel-heading"><h2 id="treeTitle">Ma famille</h2><p>Choisissez une carte pour consulter ou modifier une personne.</p></div>
+          <div class="panel-tools">
+            <button class="button button-quiet" id="importBtn" type="button" title="Importer un fichier JSON">Importer</button>
+            <button class="button button-quiet" id="exportBtn" type="button" title="Exporter votre arbre au format JSON">Exporter</button>
+          </div>
+        </div>
+        <div class="tree-viewport" id="treeViewport">
+          <div class="tree-canvas" id="treeCanvas"></div>
+          <div class="empty-state" id="emptyState">
+            <div class="empty-card">
+              <div class="empty-illustration" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 20V10m0 5c-3.7 0-6.2-2.3-6.2-6.1 3.8 0 6.2 1.8 6.2 6.1Zm0-3c0-4 2.3-6.4 6.2-6.4 0 4-2.3 6.4-6.2 6.4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 20h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+              <h3>Tout commence par une personne</h3>
+              <p>Ajoutez un premier membre de votre famille pour poser la première racine de votre arbre.</p>
+              <div class="empty-actions">
+                <button class="button button-primary" id="addFirstPerson" type="button">Ajouter la première personne</button>
+                <button class="button button-soft" id="showExampleEmpty" type="button">Voir un exemple</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tree-footer"><span>Astuce : commencez par vous, puis ajoutez parents et enfants.</span><span id="treeFooterCount">Aucune personne pour le moment</span></div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="personDialog" aria-labelledby="dialogTitle">
+    <form id="personForm">
+      <div class="dialog-head">
+        <div><h2 id="dialogTitle">Ajouter une personne</h2><p id="dialogSubtitle">Chaque détail aide à garder son souvenir vivant.</p></div>
+        <button class="close-dialog" id="closeDialog" type="button" aria-label="Fermer">×</button>
+      </div>
+      <div class="dialog-body">
+        <input id="personId" type="hidden">
+        <div class="form-grid">
+          <div class="field"><label for="firstName">Prénom *</label><input id="firstName" name="firstName" autocomplete="given-name" maxlength="48" required></div>
+          <div class="field"><label for="lastName">Nom de famille</label><input id="lastName" name="lastName" autocomplete="family-name" maxlength="64"></div>
+          <div class="field"><label for="birth">Naissance</label><input id="birth" name="birth" maxlength="40" placeholder="Année ou date"></div>
+          <div class="field"><label for="death">Décès</label><input id="death" name="death" maxlength="40" placeholder="Année ou date, si applicable"></div>
+          <div class="field full"><label for="place">Lieu associé</label><input id="place" name="place" maxlength="80" placeholder="Ville, région ou pays"></div>
+          <div class="field full" id="relationshipField"><label for="relationship">Lien avec la personne sélectionnée</label><select id="relationship" name="relationship"><option value="child">Ajouter comme enfant</option><option value="parent">Ajouter comme parent</option><option value="root">Commencer une nouvelle branche</option></select></div>
+          <div class="field full hidden" id="secondParentField"><label for="secondParent">Autre parent (facultatif)</label><select id="secondParent" name="secondParent"></select><span class="field-hint">Choisissez un second parent déjà présent dans l’arbre, si vous le souhaitez.</span></div>
+          <div class="field full"><label for="note">Souvenir ou note</label><textarea id="note" name="note" maxlength="500" placeholder="Une anecdote, une passion, une histoire à transmettre…"></textarea></div>
+        </div>
+        <p class="form-error" id="formError" role="alert"></p>
+        <div class="dialog-actions"><button class="button button-soft" id="cancelDialog" type="button">Annuler</button><button class="button button-primary" type="submit">Enregistrer</button></div>
+      </div>
+    </form>
+  </dialog>
+  <input id="importFile" type="file" accept="application/json,.json" class="hidden" aria-label="Choisir un fichier JSON">
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      'use strict';
+      const STORAGE_KEY = 'nos-racines-family-v1';
+      const $ = function (selector) { return document.querySelector(selector); };
+      const refs = {
+        familyName: $('#familyName'), treeTitle: $('#treeTitle'), peopleCount: $('#peopleCount'), generationCount: $('#generationCount'),
+        personList: $('#personList'), selectedCard: $('#selectedCard'), treeCanvas: $('#treeCanvas'), treeViewport: $('#treeViewport'),
+        emptyState: $('#emptyState'), treeFooterCount: $('#treeFooterCount'), search: $('#searchInput'), dialog: $('#personDialog'),
+        form: $('#personForm'), dialogTitle: $('#dialogTitle'), dialogSubtitle: $('#dialogSubtitle'), personId: $('#personId'),
+        firstName: $('#firstName'), lastName: $('#lastName'), birth: $('#birth'), death: $('#death'), place: $('#place'), note: $('#note'),
+        relationship: $('#relationship'), relationshipField: $('#relationshipField'), secondParent: $('#secondParent'), secondParentField: $('#secondParentField'),
+        formError: $('#formError'), importFile: $('#importFile'), toast: $('#toast')
+      };
+      let people = [];
+      let selectedId = null;
+      let toastTimer = null;
+      let searchText = '';
+
+      function escapeName(value) { return String(value || '').trim(); }
+      function fullName(person) { return [person.firstName, person.lastName].filter(Boolean).join(' '); }
+      function initials(person) {
+        const first = (person.firstName || '').trim().charAt(0);
+        const last = (person.lastName || '').trim().charAt(0);
+        return (first + last).toUpperCase() || '?';
+      }
+      function years(person) {
+        const born = person.birth ? String(person.birth).trim() : '';
+        const died = person.death ? String(person.death).trim() : '';
+        return born && died ? born + ' — ' + died : born ? 'Né(e) en ' + born : died ? 'Décédé(e) en ' + died : 'Dates inconnues';
+      }
+      function byId(id) { return people.find(function (person) { return person.id === id; }); }
+      function save() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ familyName: refs.familyName.value.trim() || 'Ma famille', people: people, selectedId: selectedId }));
+        } catch (error) {
+          showToast('Enregistrement indisponible dans ce navigateur. Pensez à exporter votre arbre.');
+        }
+      }
+      function load() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return;
+          const data = JSON.parse(raw);
+          if (data && Array.isArray(data.people)) {
+            people = data.people.filter(isValidPerson).map(normalizePerson);
+            refs.familyName.value = typeof data.familyName === 'string' ? data.familyName : 'Ma famille';
+            selectedId = people.some(function (person) { return person.id === data.selectedId; }) ? data.selectedId : (people[0] && people[0].id) || null;
+          }
+        } catch (error) {
+          people = [];
+          selectedId = null;
+        }
+      }
+      function isValidPerson(person) {
+        return person && typeof person === 'object' && typeof person.id === 'string' && typeof person.firstName === 'string';
+      }
+      function normalizePerson(person) {
+        return {
+          id: person.id,
+          firstName: escapeName(person.firstName), lastName: escapeName(person.lastName),
+          birth: String(person.birth || ''), death: String(person.death || ''), place: String(person.place || ''),
+          note: String(person.note || ''), parentIds: Array.isArray(person.parentIds) ? person.parentIds.filter(function (id) { return typeof id === 'string' && id !== person.id; }) : []
+        };
+      }
+      function showToast(message) {
+        refs.toast.textContent = message;
+        refs.toast.classList.add('show');
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(function () { refs.toast.classList.remove('show'); }, 2700);
+      }
+      function makeButton(className, label, onClick) {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = className; button.textContent = label;
+        button.addEventListener('click', onClick);
+        return button;
+      }
+      function renderList() {
+        refs.personList.replaceChildren();
+        const sorted = people.slice().sort(function (a, b) { return fullName(a).localeCompare(fullName(b), 'fr'); });
+        const matches = sorted.filter(function (person) { return fullName(person).toLocaleLowerCase('fr').includes(searchText); });
+        if (!matches.length) {
+          const empty = document.createElement('div');
+          empty.className = 'side-empty'; empty.textContent = people.length ? 'Aucun nom ne correspond à cette recherche.' : 'Les personnes ajoutées apparaîtront ici.';
+          refs.personList.appendChild(empty); return;
+        }
+        matches.forEach(function (person) {
+          const button = document.createElement('button');
+          button.type = 'button'; button.className = 'person-list-button' + (person.id === selectedId ? ' active' : '');
+          const avatar = document.createElement('span'); avatar.className = 'mini-avatar'; avatar.textContent = initials(person);
+          const copy = document.createElement('span');
+          const name = document.createElement('span'); name.className = 'person-list-name'; name.textContent = fullName(person);
+          const date = document.createElement('span'); date.className = 'person-list-years'; date.textContent = person.birth || 'Dates à compléter';
+          copy.append(name, date); button.append(avatar, copy);
+          button.addEventListener('click', function () { selectedId = person.id; render(); });
+          refs.personList.appendChild(button);
+        });
+      }
+      function renderSelected() {
+        refs.selectedCard.replaceChildren();
+        const person = byId(selectedId);
+        if (!person) {
+          const empty = document.createElement('div'); empty.className = 'detail-empty';
+          empty.textContent = 'Sélectionnez une personne dans l’arbre pour voir ses détails et ajouter un parent ou un enfant.';
+          refs.selectedCard.appendChild(empty); return;
+        }
+        const wrapper = document.createElement('div'); wrapper.className = 'selected-person';
+        const head = document.createElement('div'); head.className = 'selected-person-head';
+        const avatar = document.createElement('span'); avatar.className = 'selected-avatar'; avatar.textContent = initials(person);
+        const copy = document.createElement('div');
+        const name = document.createElement('h3'); name.className = 'selected-name'; name.textContent = fullName(person);
+        const date = document.createElement('p'); date.className = 'selected-dates'; date.textContent = years(person);
+        copy.append(name, date); head.append(avatar, copy); wrapper.append(head);
+        if (person.place) { const place = document.createElement('p'); place.className = 'selected-place'; place.textContent = '⌖  ' + person.place; wrapper.appendChild(place); }
+        if (person.note) { const note = document.createElement('p'); note.className = 'selected-note'; note.textContent = person.note; wrapper.appendChild(note); }
+        const actions = document.createElement('div'); actions.className = 'selected-actions';
+        actions.append(
+          makeButton('button button-quiet', '＋ Parent', function () { openAdd('parent'); }),
+          makeButton('button button-quiet', '＋ Enfant', function () { openAdd('child'); }),
+          makeButton('button button-quiet', 'Modifier', function () { openEdit(person); }),
+          makeButton('button button-quiet', 'Supprimer', function () { removePerson(person); })
+        );
+        wrapper.appendChild(actions); refs.selectedCard.appendChild(wrapper);
+      }
+      function getConnectedLevels() {
+        const root = byId(selectedId) || people[0];
+        if (!root) return { levels: new Map(), columns: new Map() };
+        const levels = new Map([[root.id, 0]]);
+        const queue = [root.id];
+        while (queue.length) {
+          const currentId = queue.shift();
+          const currentLevel = levels.get(currentId);
+          const current = byId(currentId);
+          if (!current) continue;
+          const parents = (current.parentIds || []).map(byId).filter(Boolean);
+          const children = people.filter(function (person) { return (person.parentIds || []).includes(currentId); });
+          parents.forEach(function (parent) {
+            if (!levels.has(parent.id)) { levels.set(parent.id, currentLevel - 1); queue.push(parent.id); }
+          });
+          children.forEach(function (child) {
+            if (!levels.has(child.id)) { levels.set(child.id, currentLevel + 1); queue.push(child.id); }
+          });
+        }
+        const columns = new Map();
+        levels.forEach(function (level, id) {
+          if (!columns.has(level)) columns.set(level, []);
+          const person = byId(id); if (person) columns.get(level).push(person);
+        });
+        columns.forEach(function (list) { list.sort(function (a, b) { return (a.birth || '9999').localeCompare(b.birth || '9999') || fullName(a).localeCompare(fullName(b), 'fr'); }); });
+        return { levels: levels, columns: columns };
+      }
+      function generationLabel(level) {
+        if (level === 0) return 'Personne repère';
+        if (level === -1) return 'Parents';
+        if (level === 1) return 'Enfants';
+        return level < 0 ? (Math.abs(level) + 'e génération au-dessus') : (level + 'e génération en dessous');
+      }
+      function renderTree() {
+        refs.treeCanvas.replaceChildren();
+        if (!people.length) {
+          refs.emptyState.classList.remove('hidden');
+          return;
+        }
+        refs.emptyState.classList.add('hidden');
+        const graph = getConnectedLevels();
+        const sortedLevels = Array.from(graph.columns.keys()).sort(function (a, b) { return a - b; });
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgNS, 'svg'); svg.classList.add('connector-layer'); svg.setAttribute('aria-hidden', 'true');
+        refs.treeCanvas.appendChild(svg);
+        sortedLevels.forEach(function (level) {
+          const column = document.createElement('div'); column.className = 'generation-column'; column.dataset.level = String(level);
+          const label = document.createElement('div'); label.className = 'generation-label'; label.textContent = generationLabel(level); column.appendChild(label);
+          graph.columns.get(level).forEach(function (person) {
+            const card = document.createElement('button'); card.type = 'button'; card.className = 'person-card' + (person.id === selectedId ? ' selected' : '');
+            card.dataset.personId = person.id;
+            card.setAttribute('aria-label', fullName(person) + ', ' + years(person));
+            const top = document.createElement('span'); top.className = 'card-top';
+            const avatar = document.createElement('span'); avatar.className = 'card-avatar'; avatar.textContent = initials(person);
+            const tag = document.createElement('span'); tag.className = 'card-tag'; tag.textContent = person.death ? 'Souvenir' : 'Famille';
+            top.append(avatar, tag);
+            const first = document.createElement('span'); first.className = 'card-name'; first.textContent = person.firstName;
+            const last = document.createElement('span'); last.className = 'card-name card-last-name'; last.textContent = person.lastName || 'Nom à compléter';
+            const date = document.createElement('span'); date.className = 'card-years'; date.textContent = years(person);
+            card.append(top, first, last, date);
+            card.addEventListener('click', function () { selectedId = person.id; render(); });
+            column.appendChild(card);
+          });
+          refs.treeCanvas.appendChild(column);
+        });
+        window.requestAnimationFrame(drawConnectors);
+        if (searchText) applySearchHighlights();
+      }
+      function drawConnectors() {
+        const svg = refs.treeCanvas.querySelector('.connector-layer');
+        if (!svg) return;
+        const canvasRect = refs.treeCanvas.getBoundingClientRect();
+        svg.setAttribute('width', String(refs.treeCanvas.scrollWidth));
+        svg.setAttribute('height', String(Math.max(refs.treeCanvas.scrollHeight, 1)));
+        svg.setAttribute('viewBox', '0 0 ' + refs.treeCanvas.scrollWidth + ' ' + Math.max(refs.treeCanvas.scrollHeight, 1));
+        svg.replaceChildren();
+        const svgNS = 'http://www.w3.org/2000/svg';
+        people.forEach(function (child) {
+          const childCard = refs.treeCanvas.querySelector('[data-person-id="' + CSS.escape(child.id) + '"]');
+          if (!childCard) return;
+          (child.parentIds || []).forEach(function (parentId) {
+            const parentCard = refs.treeCanvas.querySelector('[data-person-id="' + CSS.escape(parentId) + '"]');
+            if (!parentCard) return;
+            const parentRect = parentCard.getBoundingClientRect();
+            const childRect = childCard.getBoundingClientRect();
+            const x1 = parentRect.right - canvasRect.left;
+            const y1 = parentRect.top + parentRect.height / 2 - canvasRect.top;
+            const x2 = childRect.left - canvasRect.left;
+            const y2 = childRect.top + childRect.height / 2 - canvasRect.top;
+            const middleX = x1 + Math.max(16, (x2 - x1) / 2);
+            const path = document.createElementNS(svgNS, 'path');
+            path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' H ' + middleX + ' V ' + y2 + ' H ' + x2);
+            path.setAttribute('class', 'connector'); svg.appendChild(path);
+          });
+        });
+      }
+      function applySearchHighlights() {
+        const cards = refs.treeCanvas.querySelectorAll('.person-card');
+        cards.forEach(function (card) {
+          const person = byId(card.dataset.personId);
+          const match = !!person && fullName(person).toLocaleLowerCase('fr').includes(searchText);
+          card.classList.toggle('search-match', !!searchText && match);
+          card.classList.toggle('search-muted', !!searchText && !match);
+        });
+      }
+      function render() {
+        refs.treeTitle.textContent = refs.familyName.value.trim() || 'Ma famille';
+        refs.peopleCount.textContent = String(people.length);
+        const graph = getConnectedLevels();
+        refs.generationCount.textContent = String(graph.columns.size);
+        refs.treeFooterCount.textContent = people.length ? people.length + (people.length === 1 ? ' personne dans cet arbre' : ' personnes dans cet arbre') : 'Aucune personne pour le moment';
+        renderList(); renderSelected(); renderTree(); save();
+      }
+      function openAdd(relation) {
+        refs.form.reset(); refs.personId.value = ''; refs.formError.style.display = 'none';
+        refs.dialogTitle.textContent = 'Ajouter une personne';
+        refs.dialogSubtitle.textContent = 'Chaque détail aide à garder son souvenir vivant.';
+        refs.relationshipField.classList.toggle('hidden', !selectedId);
+        refs.relationship.value = selectedId ? (relation || 'child') : 'root';
+        refs.secondParentField.classList.add('hidden');
+        populateSecondParent();
+        updateRelationshipFields();
+        refs.dialog.showModal(); refs.firstName.focus();
+      }
+      function openEdit(person) {
+        refs.form.reset(); refs.personId.value = person.id;
+        refs.firstName.value = person.firstName; refs.lastName.value = person.lastName || ''; refs.birth.value = person.birth || '';
+        refs.death.value = person.death || ''; refs.place.value = person.place || ''; refs.note.value = person.note || '';
+        refs.relationshipField.classList.add('hidden'); refs.secondParentField.classList.add('hidden');
+        refs.dialogTitle.textContent = 'Modifier cette personne'; refs.dialogSubtitle.textContent = 'Les changements sont enregistrés automatiquement.';
+        refs.formError.style.display = 'none'; refs.dialog.showModal(); refs.firstName.focus();
+      }
+      function populateSecondParent() {
+        refs.secondParent.replaceChildren();
+        const blank = document.createElement('option'); blank.value = ''; blank.textContent = 'Aucun autre parent'; refs.secondParent.appendChild(blank);
+        people.filter(function (person) { return person.id !== selectedId; }).forEach(function (person) {
+          const option = document.createElement('option'); option.value = person.id; option.textContent = fullName(person); refs.secondParent.appendChild(option);
+        });
+      }
+      function updateRelationshipFields() {
+        const isChild = refs.relationship.value === 'child' && !!selectedId && !refs.personId.value;
+        refs.secondParentField.classList.toggle('hidden', !isChild || people.length < 2);
+      }
+      function savePerson(event) {
+        event.preventDefault();
+        const firstName = refs.firstName.value.trim();
+        if (!firstName) { refs.formError.textContent = 'Ajoutez au moins un prénom.'; refs.formError.style.display = 'block'; return; }
+        const id = refs.personId.value || ('person-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+        const existing = byId(id);
+        let parentIds = existing ? existing.parentIds.slice() : [];
+        if (!existing && selectedId) {
+          const relation = refs.relationship.value;
+          if (relation === 'child') {
+            parentIds = [selectedId];
+            if (refs.secondParent.value && refs.secondParent.value !== selectedId) parentIds.push(refs.secondParent.value);
+          } else if (relation === 'parent') {
+            const selected = byId(selectedId);
+            if (selected && !selected.parentIds.includes(id)) selected.parentIds.push(id);
+          }
+        }
+        const person = {
+          id: id, firstName: firstName, lastName: refs.lastName.value.trim(), birth: refs.birth.value.trim(),
+          death: refs.death.value.trim(), place: refs.place.value.trim(), note: refs.note.value.trim(), parentIds: parentIds
+        };
+        if (existing) people = people.map(function (item) { return item.id === id ? person : item; });
+        else people.push(person);
+        selectedId = id; refs.dialog.close(); render(); showToast(existing ? 'Les informations ont été mises à jour.' : 'La personne a été ajoutée à votre arbre.');
+      }
+      function removePerson(person) {
+        if (!window.confirm('Supprimer ' + fullName(person) + ' de cet arbre ?')) return;
+        people = people.filter(function (item) { return item.id !== person.id; });
+        people.forEach(function (item) { item.parentIds = item.parentIds.filter(function (id) { return id !== person.id; }); });
+        selectedId = people.length ? people[0].id : null; render(); showToast('La personne a été supprimée.');
+      }
+      function loadExample() {
+        people = [
+          { id: 'demo-emile', firstName: 'Émile', lastName: 'Laurent', birth: '1932', death: '2005', place: 'Lyon', note: 'Aimait les longues promenades au bord du Rhône.', parentIds: [] },
+          { id: 'demo-jeanne', firstName: 'Jeanne', lastName: 'Morel', birth: '1935', death: '2018', place: 'Lyon', note: 'Gardait toujours une place de plus à table.', parentIds: [] },
+          { id: 'demo-andre', firstName: 'André', lastName: 'Laurent', birth: '1958', place: 'Lyon', note: 'Transmet les histoires de ses parents.', parentIds: ['demo-emile', 'demo-jeanne'] },
+          { id: 'demo-colette', firstName: 'Colette', lastName: 'Martin', birth: '1960', place: 'Dijon', note: '', parentIds: [] },
+          { id: 'demo-sophie', firstName: 'Sophie', lastName: 'Laurent', birth: '1985', place: 'Paris', note: 'Cette famille est un exemple fictif, à remplacer par vos proches.', parentIds: ['demo-andre', 'demo-colette'] },
+          { id: 'demo-thomas', firstName: 'Thomas', lastName: 'Laurent', birth: '1988', place: 'Paris', note: '', parentIds: ['demo-andre', 'demo-colette'] }
+        ];
+        refs.familyName.value = 'Exemple de famille'; selectedId = 'demo-sophie'; render();
+        showToast('Exemple chargé. Vous pouvez le modifier ou le remplacer par votre arbre.');
+      }
+      function exportTree() {
+        if (!people.length) { showToast('Ajoutez une personne avant d’exporter votre arbre.'); return; }
+        const payload = { app: 'Nos racines', version: 1, familyName: refs.familyName.value.trim() || 'Ma famille', exportedAt: new Date().toISOString(), people: people };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob); const link = document.createElement('a');
+        link.href = url; link.download = 'arbre-genealogique.json'; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+        showToast('Votre arbre a été exporté au format JSON.');
+      }
+      function importTree(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function () {
+          try {
+            const data = JSON.parse(String(reader.result || ''));
+            if (!data || !Array.isArray(data.people) || !data.people.every(isValidPerson)) throw new Error('invalid');
+            const imported = data.people.map(normalizePerson);
+            const ids = new Set(imported.map(function (person) { return person.id; }));
+            imported.forEach(function (person) { person.parentIds = person.parentIds.filter(function (id) { return ids.has(id); }); });
+            people = imported; refs.familyName.value = typeof data.familyName === 'string' ? data.familyName.slice(0, 48) : 'Ma famille';
+            selectedId = people[0] ? people[0].id : null; render(); showToast('Votre arbre a été importé.');
+          } catch (error) { showToast('Ce fichier ne contient pas un arbre reconnu.'); }
+          refs.importFile.value = '';
+        };
+        reader.onerror = function () { showToast('Impossible de lire ce fichier.'); refs.importFile.value = ''; };
+        reader.readAsText(file);
+      }
+
+      $('#addPersonTop').addEventListener('click', function () { openAdd(selectedId ? 'child' : 'root'); });
+      $('#addFirstPerson').addEventListener('click', function () { openAdd('root'); });
+      $('#showExampleTop').addEventListener('click', loadExample);
+      $('#showExampleEmpty').addEventListener('click', loadExample);
+      $('#exportBtn').addEventListener('click', exportTree);
+      $('#importBtn').addEventListener('click', function () { refs.importFile.click(); });
+      refs.importFile.addEventListener('change', function () { importTree(refs.importFile.files && refs.importFile.files[0]); });
+      refs.form.addEventListener('submit', savePerson);
+      $('#closeDialog').addEventListener('click', function () { refs.dialog.close(); });
+      $('#cancelDialog').addEventListener('click', function () { refs.dialog.close(); });
+      refs.relationship.addEventListener('change', updateRelationshipFields);
+      refs.familyName.addEventListener('input', function () { refs.treeTitle.textContent = refs.familyName.value.trim() || 'Ma famille'; save(); });
+      refs.search.addEventListener('input', function () {
+        searchText = refs.search.value.trim().toLocaleLowerCase('fr'); renderList(); applySearchHighlights();
+        if (searchText) {
+          const found = people.find(function (person) { return fullName(person).toLocaleLowerCase('fr').includes(searchText); });
+          if (found) {
+            const card = refs.treeCanvas.querySelector('[data-person-id="' + CSS.escape(found.id) + '"]');
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+          }
+        }
+      });
+      window.addEventListener('resize', function () { window.requestAnimationFrame(drawConnectors); });
+      load(); render();
+    }());
+  </script>
+</body>
+</html>
+
